@@ -369,6 +369,7 @@ if(BUILD_TESTING)
 
   if(NOT CMake_TEST_EXTERNAL_CMAKE)
     add_subdirectory(CMakeLib)
+    add_subdirectory(CLintLib)
   endif()
   add_subdirectory(CMakeOnly)
   add_subdirectory(RunCMake)
