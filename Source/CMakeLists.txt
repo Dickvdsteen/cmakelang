@@ -1146,6 +1146,20 @@ if(APPLE)
   endif()
 endif()
 
+#
+# Build CLintLib
+#
+add_library(
+  CLintLib
+  CLint/cmCLintClass.cxx  )
+target_include_directories(
+  CLintLib
+  PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/CLint"
+    "${CMAKE_CURRENT_BINARY_DIR}/CLint"
+  )
+target_link_libraries(CLintLib PUBLIC CMakeLib)
+
 # Render config header file for CPackLib
 configure_file(CPack/cmCPackConfigure.h.in CPack/cmCPackConfigure.h)
 
@@ -1164,6 +1178,11 @@ list(APPEND _tools ctest)
 add_executable(cpack CPack/cpack.cxx)
 target_link_libraries(cpack PRIVATE CPackLib ManifestLib)
 list(APPEND _tools cpack)
+
+# Build CLint executable
+add_executable(clint CLint/clint.cxx)
+target_link_libraries(clint PRIVATE CLintLib ManifestLib)
+list(APPEND _tools clint)
 
 # Curses GUI
 if(BUILD_CursesDialog)
