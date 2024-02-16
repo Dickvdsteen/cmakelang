@@ -21,7 +21,6 @@
 #include "cmArgumentParser.h"
 #include "cmArgumentParserTypes.h"
 #include "cmExecutionStatus.h"
-#include "cmExperimental.h"
 #include "cmExportSet.h"
 #include "cmFileSet.h"
 #include "cmGeneratorExpression.h"
@@ -39,6 +38,7 @@
 #include "cmInstallRuntimeDependencySetGenerator.h"
 #include "cmInstallScriptGenerator.h"
 #include "cmInstallTargetGenerator.h"
+#include "cmList.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
 #include "cmPolicies.h"
@@ -490,6 +490,7 @@ bool HandleTargetsMode(std::vector<std::string> const& args,
   publicHeaderArgs.Parse(argVectors.PublicHeader, &unknownArgs);
   resourceArgs.Parse(argVectors.Resource, &unknownArgs);
   includesArgs.Parse(&argVectors.Includes, &unknownArgs);
+  cxxModuleBmiArgs.Parse(argVectors.CxxModulesBmi, &unknownArgs);
   for (std::size_t i = 0; i < argVectors.FileSets.size(); i++) {
     // We have to create a separate object for the parsing because
     // cmArgumentParser<void>::Bind() binds to a specific address, but the
@@ -498,15 +499,6 @@ bool HandleTargetsMode(std::vector<std::string> const& args,
     cmInstallCommandFileSetArguments fileSetArg(helper.DefaultComponentName);
     fileSetArg.Parse(argVectors.FileSets[i], &unknownArgs);
     fileSetArgs[i] = std::move(fileSetArg);
-  }
-
-  bool const supportCxx20FileSetTypes = cmExperimental::HasSupportEnabled(
-    *helper.Makefile, cmExperimental::Feature::CxxModuleCMakeApi);
-  if (!supportCxx20FileSetTypes) {
-    std::copy(argVectors.CxxModulesBmi.begin(), argVectors.CxxModulesBmi.end(),
-              std::back_inserter(unknownArgs));
-  } else {
-    cxxModuleBmiArgs.Parse(argVectors.CxxModulesBmi, &unknownArgs);
   }
 
   if (!unknownArgs.empty()) {
@@ -540,11 +532,9 @@ bool HandleTargetsMode(std::vector<std::string> const& args,
   success = success && privateHeaderArgs.Finalize();
   success = success && publicHeaderArgs.Finalize();
   success = success && resourceArgs.Finalize();
+  success = success && cxxModuleBmiArgs.Finalize();
   for (auto& fileSetArg : fileSetArgs) {
     success = success && fileSetArg.Finalize();
-  }
-  if (supportCxx20FileSetTypes) {
-    success = success && cxxModuleBmiArgs.Finalize();
   }
 
   if (!success) {
@@ -1079,7 +1069,7 @@ bool HandleTargetsMode(std::vector<std::string> const& args,
     if (createInstallGeneratorsForTargetFileSets && !namelinkOnly) {
       cmValue files = target.GetProperty("PRIVATE_HEADER");
       if (cmNonempty(files)) {
-        std::vector<std::string> relFiles = cmExpandedList(*files);
+        cmList relFiles{ *files };
         std::vector<std::string> absFiles;
         if (!helper.MakeFilesFullPath("PRIVATE_HEADER", relFiles, absFiles)) {
           return false;
@@ -1101,7 +1091,7 @@ bool HandleTargetsMode(std::vector<std::string> const& args,
 
       files = target.GetProperty("PUBLIC_HEADER");
       if (cmNonempty(files)) {
-        std::vector<std::string> relFiles = cmExpandedList(*files);
+        cmList relFiles{ *files };
         std::vector<std::string> absFiles;
         if (!helper.MakeFilesFullPath("PUBLIC_HEADER", relFiles, absFiles)) {
           return false;
@@ -1123,7 +1113,7 @@ bool HandleTargetsMode(std::vector<std::string> const& args,
 
       files = target.GetProperty("RESOURCE");
       if (cmNonempty(files)) {
-        std::vector<std::string> relFiles = cmExpandedList(*files);
+        cmList relFiles{ *files };
         std::vector<std::string> absFiles;
         if (!helper.MakeFilesFullPath("RESOURCE", relFiles, absFiles)) {
           return false;
@@ -1145,8 +1135,8 @@ bool HandleTargetsMode(std::vector<std::string> const& args,
     if (!namelinkOnly) {
       for (std::size_t i = 0; i < fileSetArgs.size(); i++) {
         if (auto* fileSet = target.GetFileSet(fileSetArgs[i].GetFileSet())) {
-          auto interfaceFileSetEntries = cmExpandedList(target.GetSafeProperty(
-            cmTarget::GetInterfaceFileSetsPropertyName(fileSet->GetType())));
+          cmList interfaceFileSetEntries{ target.GetSafeProperty(
+            cmTarget::GetInterfaceFileSetsPropertyName(fileSet->GetType())) };
           if (std::find(interfaceFileSetEntries.begin(),
                         interfaceFileSetEntries.end(),
                         fileSetArgs[i].GetFileSet()) !=
@@ -1172,8 +1162,7 @@ bool HandleTargetsMode(std::vector<std::string> const& args,
       }
     }
 
-    if (supportCxx20FileSetTypes &&
-        !cxxModuleBmiArgs.GetDestination().empty()) {
+    if (!cxxModuleBmiArgs.GetDestination().empty()) {
       cxxModuleBmiGenerator = cm::make_unique<cmInstallCxxModuleBmiGenerator>(
         target.GetName(),
         helper.GetCxxModulesBmiDestination(&cxxModuleBmiArgs),
@@ -1836,8 +1825,7 @@ bool HandleDirectoryMode(std::vector<std::string> const& args,
       }
 
       // Make sure the name is a directory.
-      if (cmSystemTools::FileExists(dir) &&
-          !cmSystemTools::FileIsDirectory(dir)) {
+      if (cmSystemTools::FileExists(dir, true)) {
         status.SetError(cmStrCat(args[0], " given non-directory \"", args[i],
                                  "\" to install."));
         return false;
@@ -2042,7 +2030,7 @@ bool HandleExportAndroidMKMode(std::vector<std::string> const& args,
     cm::make_unique<cmInstallExportGenerator>(
       &exportSet, ica.GetDestination(), ica.GetPermissions(),
       ica.GetConfigurations(), ica.GetComponent(), message,
-      ica.GetExcludeFromAll(), fname, name_space, "", exportOld, true,
+      ica.GetExcludeFromAll(), fname, name_space, "", exportOld, true, false,
       helper.Makefile->GetBacktrace()));
 
   return true;
@@ -2066,17 +2054,14 @@ bool HandleExportMode(std::vector<std::string> const& args,
   bool exportOld = false;
   std::string filename;
   std::string cxx_modules_directory;
+  bool exportPackageDependencies = false;
 
   ica.Bind("EXPORT"_s, exp);
   ica.Bind("NAMESPACE"_s, name_space);
   ica.Bind("EXPORT_LINK_INTERFACE_LIBRARIES"_s, exportOld);
   ica.Bind("FILE"_s, filename);
-
-  bool const supportCxx20FileSetTypes = cmExperimental::HasSupportEnabled(
-    *helper.Makefile, cmExperimental::Feature::CxxModuleCMakeApi);
-  if (supportCxx20FileSetTypes) {
-    ica.Bind("CXX_MODULES_DIRECTORY"_s, cxx_modules_directory);
-  }
+  ica.Bind("CXX_MODULES_DIRECTORY"_s, cxx_modules_directory);
+  ica.Bind("EXPORT_PACKAGE_DEPENDENCIES"_s, exportPackageDependencies);
 
   std::vector<std::string> unknownArgs;
   ica.Parse(args, &unknownArgs);
@@ -2164,7 +2149,8 @@ bool HandleExportMode(std::vector<std::string> const& args,
       &exportSet, ica.GetDestination(), ica.GetPermissions(),
       ica.GetConfigurations(), ica.GetComponent(), message,
       ica.GetExcludeFromAll(), fname, name_space, cxx_modules_directory,
-      exportOld, false, helper.Makefile->GetBacktrace()));
+      exportOld, false, exportPackageDependencies,
+      helper.Makefile->GetBacktrace()));
 
   return true;
 }

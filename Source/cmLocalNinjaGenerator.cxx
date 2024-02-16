@@ -14,6 +14,8 @@
 
 #include "cmsys/FStream.hxx"
 
+#include "cm_codecvt_Encoding.hxx"
+
 #include "cmCryptoHash.h"
 #include "cmCustomCommand.h"
 #include "cmCustomCommandGenerator.h"
@@ -22,6 +24,7 @@
 #include "cmGeneratorTarget.h"
 #include "cmGlobalGenerator.h"
 #include "cmGlobalNinjaGenerator.h"
+#include "cmList.h"
 #include "cmLocalGenerator.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
@@ -40,19 +43,18 @@
 
 cmLocalNinjaGenerator::cmLocalNinjaGenerator(cmGlobalGenerator* gg,
                                              cmMakefile* mf)
-  : cmLocalCommonGenerator(gg, mf, WorkDir::TopBin)
+  : cmLocalCommonGenerator(gg, mf)
 {
 }
 
 // Virtual public methods.
 
-cmRulePlaceholderExpander*
+std::unique_ptr<cmRulePlaceholderExpander>
 cmLocalNinjaGenerator::CreateRulePlaceholderExpander() const
 {
-  cmRulePlaceholderExpander* ret =
-    this->cmLocalGenerator::CreateRulePlaceholderExpander();
+  auto ret = this->cmLocalGenerator::CreateRulePlaceholderExpander();
   ret->SetTargetImpLib("$TARGET_IMPLIB");
-  return ret;
+  return std::unique_ptr<cmRulePlaceholderExpander>(std::move(ret));
 }
 
 cmLocalNinjaGenerator::~cmLocalNinjaGenerator() = default;
@@ -187,6 +189,26 @@ cmGlobalNinjaGenerator* cmLocalNinjaGenerator::GetGlobalNinjaGenerator()
   return static_cast<cmGlobalNinjaGenerator*>(this->GetGlobalGenerator());
 }
 
+std::string const& cmLocalNinjaGenerator::GetWorkingDirectory() const
+{
+  return this->GetState()->GetBinaryDirectory();
+}
+
+std::string cmLocalNinjaGenerator::MaybeRelativeToWorkDir(
+  std::string const& path) const
+{
+  return this->GetGlobalNinjaGenerator()->NinjaOutputPath(
+    this->MaybeRelativeToTopBinDir(path));
+}
+
+std::string cmLocalNinjaGenerator::GetLinkDependencyFile(
+  cmGeneratorTarget* target, std::string const& config) const
+{
+  return cmStrCat(target->GetSupportDirectory(),
+                  this->GetGlobalNinjaGenerator()->ConfigDirectory(config),
+                  "/link.d");
+}
+
 // Virtual protected methods.
 
 std::string cmLocalNinjaGenerator::ConvertToIncludeReference(
@@ -301,7 +323,7 @@ void cmLocalNinjaGenerator::WritePools(std::ostream& os)
   if (jobpools) {
     cmGlobalNinjaGenerator::WriteComment(
       os, "Pools defined by global property JOB_POOLS");
-    std::vector<std::string> pools = cmExpandedList(*jobpools);
+    cmList pools{ *jobpools };
     for (std::string const& pool : pools) {
       const std::string::size_type eq = pool.find('=');
       unsigned int jobs;
@@ -516,13 +538,14 @@ std::string cmLocalNinjaGenerator::BuildCommandLine(
 
   std::ostringstream cmd;
 #ifdef _WIN32
+  cmGlobalNinjaGenerator const* gg = this->GetGlobalNinjaGenerator();
   bool const needCMD =
     cmdLines.size() > 1 || (customStep.empty() && RuleNeedsCMD(cmdLines[0]));
   for (auto li = cmdLines.begin(); li != cmdLines.end(); ++li) {
     if (li != cmdLines.begin()) {
       cmd << " && ";
     } else if (needCMD) {
-      cmd << "cmd.exe /C \"";
+      cmd << gg->GetComspec() << " /C \"";
     }
     // Put current cmdLine in brackets if it contains "||" because it has
     // higher precedence than "&&" in cmd.exe
@@ -892,8 +915,7 @@ std::string cmLocalNinjaGenerator::MakeCustomLauncher(
   }
   vars.Output = output.c_str();
 
-  std::unique_ptr<cmRulePlaceholderExpander> rulePlaceholderExpander(
-    this->CreateRulePlaceholderExpander());
+  auto rulePlaceholderExpander = this->CreateRulePlaceholderExpander();
 
   std::string launcher = *property_value;
   rulePlaceholderExpander->ExpandRuleVariables(this, launcher, vars);
@@ -908,14 +930,11 @@ void cmLocalNinjaGenerator::AdditionalCleanFiles(const std::string& config)
 {
   if (cmValue prop_value =
         this->Makefile->GetProperty("ADDITIONAL_CLEAN_FILES")) {
-    std::vector<std::string> cleanFiles;
-    {
-      cmExpandList(cmGeneratorExpression::Evaluate(*prop_value, this, config),
-                   cleanFiles);
-    }
+    cmList cleanFiles{ cmGeneratorExpression::Evaluate(*prop_value, this,
+                                                       config) };
     std::string const& binaryDir = this->GetCurrentBinaryDirectory();
     cmGlobalNinjaGenerator* gg = this->GetGlobalNinjaGenerator();
-    for (std::string const& cleanFile : cleanFiles) {
+    for (auto const& cleanFile : cleanFiles) {
       // Support relative paths
       gg->AddAdditionalCleanFile(
         cmSystemTools::CollapseFullPath(cleanFile, binaryDir), config);

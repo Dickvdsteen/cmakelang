@@ -33,7 +33,7 @@ property of ``<target>``.  ``PUBLIC`` and ``INTERFACE`` items will populate the
 Repeated calls for the same ``<target>`` will append items in the order called.
 
 Projects should generally avoid using ``PUBLIC`` or ``INTERFACE`` for targets
-that will be :ref:`exported <install(EXPORT)>`, or they should at least use
+that will be :command:`exported <install(EXPORT)>`, or they should at least use
 the :genex:`$<BUILD_INTERFACE:...>` generator expression to prevent precompile
 headers from appearing in an installed exported target.  Consumers of a target
 should typically be in control of what precompile headers they use, not have
@@ -70,7 +70,7 @@ included by absolute path.  For example:
       <unordered_map>
   )
 
-.. |command_name| replace:: ``target_compile_features``
+.. |command_name| replace:: ``target_precompile_headers``
 .. |more_see_also| replace:: The :genex:`$<COMPILE_LANGUAGE:...>` generator
    expression is particularly useful for specifying a language-specific header
    to precompile for only one language (e.g. ``CXX`` and not ``C``).  In this
@@ -94,7 +94,7 @@ Reusing Precompile Headers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The command also supports a second signature which can be used to specify that
-one target re-uses a precompiled header file artifact from another target
+one target reuses a precompiled header file artifact from another target
 instead of generating its own:
 
 .. code-block:: cmake

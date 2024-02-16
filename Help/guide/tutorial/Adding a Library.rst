@@ -96,7 +96,7 @@ a library target called ``MathFunctions`` with :command:`add_library`. The
 source files for the library are passed as an argument to
 :command:`add_library`. This looks like the following line:
 
-.. raw:: html/
+.. raw:: html
 
   <details><summary>TODO 1: Click to show/hide answer</summary>
 
@@ -145,10 +145,10 @@ Next, the new library target is linked to the executable target using
 
   </details>
 
-Finally we need to specify the library's header file location. Modify
-:command:`target_include_directories` to add the ``MathFunctions`` subdirectory
-as an include directory so that the ``MathFunctions.h`` header file can be
-found.
+Finally we need to specify the library's header file location.
+Modify the existing :command:`target_include_directories` call
+to add the ``MathFunctions`` subdirectory as an include directory
+so that the ``MathFunctions.h`` header file can be found.
 
 .. raw:: html
 
@@ -184,7 +184,7 @@ Now let's use our library. In ``tutorial.cxx``, include ``MathFunctions.h``:
 
   </details>
 
-Lastly, replace ``sqrt`` with our library function ``mathfunctions::mysqrt``.
+Lastly, replace ``sqrt`` with the wrapper function ``mathfunctions::sqrt``.
 
 .. raw:: html
 
@@ -409,7 +409,7 @@ that has sources ``mysqrt.cxx``.
   :name: MathFunctions/CMakeLists.txt-add_library-SqrtLibrary
   :language: cmake
   :start-after: # library that just does sqrt
-  :end-before: target_link_libraries(MathFunctions
+  :end-before: # TODO 7: Link
 
 .. raw:: html
 
@@ -426,7 +426,8 @@ enabled.
   :caption: TODO 13 : MathFunctions/CMakeLists.txt
   :name: MathFunctions/CMakeLists.txt-target_link_libraries-SqrtLibrary
   :language: cmake
-  :lines: 16-18
+  :start-after: to tutorial_compiler_flags
+  :end-before: endif()
 
 .. raw:: html
 

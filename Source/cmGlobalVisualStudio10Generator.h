@@ -93,6 +93,12 @@ public:
    * directory */
   std::string const& GetPlatformToolsetCudaVSIntegrationSubdirString() const;
 
+  /** The fortran toolset name.  */
+  cm::optional<std::string> GetPlatformToolsetFortran() const override
+  {
+    return this->GeneratorToolsetFortran;
+  }
+
   /** Return whether we need to use No/Debug instead of false/true
       for GenerateDebugInformation.  */
   bool GetPlatformToolsetNeedsDebugEnum() const
@@ -149,6 +155,8 @@ public:
 
   virtual bool IsUtf8EncodingSupported() const { return false; }
 
+  virtual bool IsScanDependenciesSupported() const { return false; }
+
   static std::string GetInstalledNsightTegraVersion();
 
   /** Return the first two components of CMAKE_SYSTEM_VERSION.  */
@@ -185,8 +193,7 @@ protected:
 
   bool InitializePlatform(cmMakefile* mf) override;
   virtual bool InitializePlatformWindows(cmMakefile* mf);
-  virtual bool VerifyNoGeneratorPlatformVersion(
-    cmMakefile* mf, cm::optional<std::string> reason = cm::nullopt) const;
+  virtual bool VerifyNoGeneratorPlatformVersion(cmMakefile* mf) const;
 
   virtual bool ProcessGeneratorToolsetField(std::string const& key,
                                             std::string const& value);
@@ -220,6 +227,7 @@ protected:
   std::string GeneratorToolsetCudaCustomDir;
   std::string GeneratorToolsetCudaNvccSubdir;
   std::string GeneratorToolsetCudaVSIntegrationSubdir;
+  cm::optional<std::string> GeneratorToolsetFortran;
   std::string DefaultPlatformToolset;
   std::string DefaultPlatformToolsetHostArchitecture;
   std::string DefaultAndroidToolset;

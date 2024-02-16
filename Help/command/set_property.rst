@@ -12,7 +12,8 @@ Set a named property in a given scope.
                           [DIRECTORY <dirs> ...]
                           [TARGET_DIRECTORY <targets> ...] |
                 INSTALL   [<file1> ...]     |
-                TEST      [<test1> ...]     |
+                TEST      [<test1> ...]
+                          [DIRECTORY <dir>] |
                 CACHE     [<entry1> ...]    >
                [APPEND] [APPEND_STRING]
                PROPERTY <name> [<value1> ...])
@@ -37,6 +38,8 @@ It must be one of the following:
 ``TARGET``
   Scope may name zero or more existing targets.
   See also the :command:`set_target_properties` command.
+
+  :ref:`Alias Targets` do not support setting target properties.
 
 ``SOURCE``
   Scope may name zero or more source files.  By default, source file properties
@@ -88,6 +91,17 @@ It must be one of the following:
   Test property values may be specified using
   :manual:`generator expressions <cmake-generator-expressions(7)>`
   for tests created by the :command:`add_test(NAME)` signature.
+
+  .. versionadded:: 3.28
+
+    Visibility can be set in other directory scopes using the following sub-option:
+
+    ``DIRECTORY <dir>``
+      The test property will be set in the ``<dir>`` directory's scope. CMake must
+      already know about this directory, either by having added it through a call
+      to :command:`add_subdirectory` or it being the top level source directory.
+      Relative paths are treated as relative to the current source directory.
+      ``<dir>`` may reference a binary directory.
 
 ``CACHE``
   Scope must name zero or more existing cache entries.

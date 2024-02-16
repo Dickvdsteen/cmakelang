@@ -11,7 +11,6 @@
 #include <sstream>
 #include <utility>
 
-#include <cm/memory>
 #include <cm/optional>
 #include <cmext/string_view>
 
@@ -23,6 +22,7 @@
 
 #include "cmAlgorithms.h"
 #include "cmDependencyProvider.h"
+#include "cmList.h"
 #include "cmListFileCache.h"
 #include "cmMakefile.h"
 #include "cmMessageType.h"
@@ -1044,6 +1044,8 @@ bool cmFindPackageCommand::InitialPass(std::vector<std::string> const& args)
   PushPopRootPathStack pushPopRootPathStack(*this);
   SetRestoreFindDefinitions setRestoreFindDefinitions(*this, components,
                                                       componentVarDefs);
+  cmMakefile::FindPackageStackRAII findPackageStackRAII(this->Makefile,
+                                                        this->Name);
 
   // See if we have been told to delegate to FetchContent or some other
   // redirected config package first. We have to check all names that
@@ -1727,7 +1729,7 @@ void cmFindPackageCommand::SetConfigDirCacheVariable(const std::string& value)
   std::string const help =
     cmStrCat("The directory containing a CMake configuration file for ",
              this->Name, '.');
-  this->Makefile->AddCacheDefinition(this->Variable, value, help.c_str(),
+  this->Makefile->AddCacheDefinition(this->Variable, value, help,
                                      cmStateEnums::PATH, true);
   if (this->Makefile->GetPolicyStatus(cmPolicies::CMP0126) ==
         cmPolicies::NEW &&
@@ -1781,28 +1783,20 @@ bool cmFindPackageCommand::ReadListFile(const std::string& f,
 
 void cmFindPackageCommand::AppendToFoundProperty(const bool found)
 {
-  std::vector<std::string> foundContents;
+  cmList foundContents;
   cmValue foundProp =
     this->Makefile->GetState()->GetGlobalProperty("PACKAGES_FOUND");
-  if (cmNonempty(foundProp)) {
-    cmExpandList(*foundProp, foundContents, false);
-    auto nameIt =
-      std::find(foundContents.begin(), foundContents.end(), this->Name);
-    if (nameIt != foundContents.end()) {
-      foundContents.erase(nameIt);
-    }
+  if (!foundProp.IsEmpty()) {
+    foundContents.assign(*foundProp);
+    foundContents.remove_items({ this->Name });
   }
 
-  std::vector<std::string> notFoundContents;
+  cmList notFoundContents;
   cmValue notFoundProp =
     this->Makefile->GetState()->GetGlobalProperty("PACKAGES_NOT_FOUND");
-  if (cmNonempty(notFoundProp)) {
-    cmExpandList(*notFoundProp, notFoundContents, false);
-    auto nameIt =
-      std::find(notFoundContents.begin(), notFoundContents.end(), this->Name);
-    if (nameIt != notFoundContents.end()) {
-      notFoundContents.erase(nameIt);
-    }
+  if (!notFoundProp.IsEmpty()) {
+    notFoundContents.assign(*notFoundProp);
+    notFoundContents.remove_items({ this->Name });
   }
 
   if (found) {
@@ -1811,12 +1805,11 @@ void cmFindPackageCommand::AppendToFoundProperty(const bool found)
     notFoundContents.push_back(this->Name);
   }
 
-  std::string tmp = cmJoin(foundContents, ";");
-  this->Makefile->GetState()->SetGlobalProperty("PACKAGES_FOUND", tmp.c_str());
+  this->Makefile->GetState()->SetGlobalProperty("PACKAGES_FOUND",
+                                                foundContents.to_string());
 
-  tmp = cmJoin(notFoundContents, ";");
   this->Makefile->GetState()->SetGlobalProperty("PACKAGES_NOT_FOUND",
-                                                tmp.c_str());
+                                                notFoundContents.to_string());
 }
 
 void cmFindPackageCommand::AppendSuccessInformation()
@@ -1853,7 +1846,7 @@ void cmFindPackageCommand::AppendSuccessInformation()
       cmStrCat(this->VersionExact ? "==" : ">=", ' ', this->Version);
   }
   this->Makefile->GetState()->SetGlobalProperty(versionInfoPropName,
-                                                versionInfo.c_str());
+                                                versionInfo);
   if (this->Required) {
     std::string const requiredInfoPropName =
       cmStrCat("_CMAKE_", this->Name, "_TYPE");
@@ -2338,7 +2331,7 @@ void cmFindPackageCommand::FillPrefixesCMakeSystemVariable()
     cmValue prefix_paths =
       this->Makefile->GetDefinition("CMAKE_SYSTEM_PREFIX_PATH");
     // remove entry from CMAKE_SYSTEM_PREFIX_PATH
-    std::vector<std::string> expanded = cmExpandedList(*prefix_paths);
+    cmList expanded{ *prefix_paths };
     long count = 0;
     for (const auto& path : expanded) {
       bool const to_add =

@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <map>
+#include <type_traits>
 #include <utility>
 
 #include "cmsys/FStream.hxx"
@@ -13,6 +14,7 @@
 #include "cmFortranParser.h" /* Interface to parser object.  */
 #include "cmGeneratedFileStream.h"
 #include "cmGlobalUnixMakefileGenerator3.h"
+#include "cmList.h"
 #include "cmLocalUnixMakefileGenerator3.h"
 #include "cmMakefile.h"
 #include "cmOutputConverter.h"
@@ -78,9 +80,8 @@ cmDependsFortran::cmDependsFortran(cmLocalUnixMakefileGenerator3* lg)
   this->SetIncludePathFromLanguage("Fortran");
 
   // Get the list of definitions.
-  std::vector<std::string> definitions;
   cmMakefile* mf = this->LocalGenerator->GetMakefile();
-  mf->GetDefExpandList("CMAKE_TARGET_DEFINITIONS_Fortran", definitions);
+  cmList definitions{ mf->GetDefinition("CMAKE_TARGET_DEFINITIONS_Fortran") };
 
   // translate i.e. FOO=BAR to FOO and add it to the list of defined
   // preprocessor symbols
@@ -244,9 +245,9 @@ bool cmDependsFortran::LocateModules()
 
   // Load information about other targets.
   cmMakefile* mf = this->LocalGenerator->GetMakefile();
-  std::vector<std::string> infoFiles;
-  mf->GetDefExpandList("CMAKE_Fortran_TARGET_LINKED_INFO_FILES", infoFiles);
-  for (std::string const& i : infoFiles) {
+  cmList infoFiles{ mf->GetDefinition(
+    "CMAKE_Fortran_TARGET_LINKED_INFO_FILES") };
+  for (auto const& i : infoFiles) {
     std::string targetDir = cmSystemTools::GetFilenamePath(i);
     std::string fname = targetDir + "/fortran.internal";
     cmsys::ifstream fin(fname.c_str());
@@ -257,6 +258,12 @@ bool cmDependsFortran::LocateModules()
     }
     this->MatchRemoteModules(fin, targetDir);
   }
+
+  // TODO: Use `CMAKE_Fortran_TARGET_FORWARD_LINKED_INFO_FILES` to handle cases
+  // described in #25425. Note that because Makefiles generators do not
+  // implement relaxed object compilation as described in #15555, the issues
+  // never actually cause build failures; only incremental build incorrectness.
+
   return true;
 }
 
@@ -416,7 +423,7 @@ bool cmDependsFortran::WriteDependenciesReal(std::string const& obj,
       // file is not updated. In such case the stamp file will be always
       // older than its prerequisite and trigger cmake_copy_f90_mod
       // on each new build. This is expected behavior for incremental
-      // builds and can not be changed without preforming recursive make
+      // builds and can not be changed without performing recursive make
       // calls that would considerably slow down the building process.
       makeDepends << stampFileForMake << ": " << obj_m << '\n';
       makeDepends << "\t$(CMAKE_COMMAND) -E cmake_copy_f90_mod " << modFile

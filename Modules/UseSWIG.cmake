@@ -189,7 +189,7 @@ ensure generated files will receive the required settings.
   :ref:`Makefile <Makefile Generators>`,
   :ref:`Ninja <Ninja Generators>`, :generator:`Xcode`, and
   :ref:`Visual Studio <Visual Studio Generators>`
-  (:generator:`Visual Studio 11 2012` and above) generators. Default value is
+  (:generator:`Visual Studio 12 2013` and above) generators. Default value is
   ``FALSE``.
 
   .. versionadded:: 3.21
@@ -353,7 +353,7 @@ as well as ``SWIG``:
   :ref:`Makefile <Makefile Generators>`,
   :ref:`Ninja <Ninja Generators>`, :generator:`Xcode`, and
   :ref:`Visual Studio <Visual Studio Generators>`
-  (:generator:`Visual Studio 11 2012` and above) generators. Default value is
+  (:generator:`Visual Studio 12 2013` and above) generators. Default value is
   ``FALSE``.
 
   Source file property ``USE_SWIG_DEPENDENCIES``, if not defined, will be
@@ -657,7 +657,7 @@ function(SWIG_ADD_SOURCE_TO_MODULE name outfiles infile)
     if(NOT ("-dllimport" IN_LIST swig_source_file_flags OR "-dllimport" IN_LIST SWIG_MODULE_${name}_EXTRA_FLAGS))
       # This makes sure that the name used in the generated DllImport
       # matches the library name created by CMake
-      list (APPEND SWIG_MODULE_${name}_EXTRA_FLAGS "-dllimport" "$<TARGET_FILE_PREFIX:${target_name}>$<TARGET_FILE_BASE_NAME:${target_name}>")
+      list (APPEND SWIG_MODULE_${name}_EXTRA_FLAGS "-dllimport" "$<TARGET_FILE_BASE_NAME:${target_name}>")
     endif()
   endif()
   if (SWIG_MODULE_${name}_LANGUAGE STREQUAL "PYTHON" AND NOT SWIG_MODULE_${name}_NOPROXY)

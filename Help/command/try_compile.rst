@@ -65,6 +65,7 @@ Try Compiling Source Files
 .. code-block:: cmake
 
   try_compile(<compileResultVar>
+              [SOURCES_TYPE <type>]
               <SOURCES <srcfile...>                 |
                SOURCE_FROM_CONTENT <name> <content> |
                SOURCE_FROM_VAR <name> <var>         |
@@ -76,6 +77,7 @@ Try Compiling Source Files
               [COMPILE_DEFINITIONS <defs>...]
               [LINK_OPTIONS <options>...]
               [LINK_LIBRARIES <libs>...]
+              [LINKER_LANGUAGE <lang>]
               [OUTPUT_VARIABLE <var>]
               [COPY_FILE <fileName> [COPY_FILE_ERROR <var>]]
               [<LANG>_STANDARD <std>]
@@ -143,7 +145,12 @@ single output directory, such that you can only debug one such ``try_compile``
 call at a time.  Use of the newer signature is recommended to simplify
 debugging of multiple ``try_compile`` operations.
 
-The options are:
+.. _`try_compile Options`:
+
+Options
+^^^^^^^
+
+The options for the above signatures are:
 
 ``CMAKE_FLAGS <flags>...``
   Specify flags of the form :option:`-DVAR:TYPE=VALUE <cmake -D>` to be passed
@@ -171,12 +178,23 @@ The options are:
   If this option is specified, any ``-DLINK_LIBRARIES=...`` value
   given to the ``CMAKE_FLAGS`` option will be ignored.
 
+  .. versionadded:: 3.29
+    Alias targets to imported libraries are also supported.
+
 ``LINK_OPTIONS <options>...``
   .. versionadded:: 3.14
 
   Specify link step options to pass to :command:`target_link_options` or to
   set the :prop_tgt:`STATIC_LIBRARY_OPTIONS` target property in the generated
   project, depending on the :variable:`CMAKE_TRY_COMPILE_TARGET_TYPE` variable.
+
+``LINKER_LANGUAGE <lang>```
+  .. versionadded:: 3.29
+
+  Specify the :prop_tgt:`LINKER_LANGUAGE` target property of the generated
+  project.  When using multiple source files with different languages, set
+  this to the language of the source file containing the program entry point,
+  e.g., ``main``.
 
 ``LOG_DESCRIPTION <text>``
   .. versionadded:: 3.26
@@ -243,6 +261,24 @@ The options are:
   components.
 
   ``SOURCE_FROM_VAR`` may be specified multiple times.
+
+``SOURCES_TYPE <type>``
+  .. versionadded:: 3.28
+
+  Sources may be classified using the ``SOURCES_TYPE`` argument. Once
+  specified, all subsequent sources specified will be treated as that type
+  until another ``SOURCES_TYPE`` is given. Available types are:
+
+  ``NORMAL``
+    Sources are not added to any ``FILE_SET`` in the generated project.
+
+  ``CXX_MODULE``
+    .. versionadded:: 3.28
+
+    Sources are added to a ``FILE_SET`` of type ``CXX_MODULES`` in the
+    generated project.
+
+  The default type of sources is ``NORMAL``.
 
 ``<LANG>_STANDARD <std>``
   .. versionadded:: 3.8

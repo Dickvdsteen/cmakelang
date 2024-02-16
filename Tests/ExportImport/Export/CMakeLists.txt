@@ -4,6 +4,8 @@ if(POLICY CMP0129)
 endif()
 project(Export C CXX)
 
+find_package(Foo REQUIRED CONFIG NO_DEFAULT_PATH)
+
 # Pretend that RelWithDebInfo should link to debug libraries to test
 # the DEBUG_CONFIGURATIONS property.
 set_property(GLOBAL PROPERTY DEBUG_CONFIGURATIONS Debug RelWithDebInfo)
@@ -22,9 +24,18 @@ add_executable(testExe2 testExe2.c)
 set_property(TARGET testExe2 PROPERTY ENABLE_EXPORTS 1)
 set_property(TARGET testExe2 PROPERTY LINK_INTERFACE_LIBRARIES testExe2lib)
 
+add_library(compileOnly INTERFACE)
+target_compile_definitions(compileOnly INTERFACE FROM_compileOnly)
+target_link_options(compileOnly INTERFACE -fthis-flag-does-not-exist)
+
 add_library(testLib1 STATIC testLib1.c)
 add_library(testLib2 STATIC testLib2.c)
 target_link_libraries(testLib2 testLib1)
+target_link_libraries(testLib2
+  PRIVATE
+    testLib1
+    "$<COMPILE_ONLY:compileOnly>")
+
 
 # Test install(FILES) with generator expressions referencing testLib1.
 add_custom_command(TARGET testLib1 POST_BUILD
@@ -101,6 +112,7 @@ add_library(testLib9ObjIface OBJECT testLib9ObjIface.c)
 target_compile_definitions(testLib9ObjIface INTERFACE testLib9ObjIface_USED)
 add_library(testLib9 STATIC testLib9.c)
 target_link_libraries(testLib9 INTERFACE testLib9ObjIface PUBLIC testLib9ObjPub PRIVATE testLib9ObjPriv)
+target_link_libraries(testLib9 PUBLIC Foo::Foo)
 cmake_policy(POP)
 
 # Test using the target_link_libraries command to set the
@@ -556,6 +568,7 @@ install(FILES
 # Install and export from install tree.
 install(
   TARGETS
+  compileOnly
   testExe1 testLib1 testLib2 testExe2 testLib3 testLib4 testExe3 testExe4
   testExe2lib testLib4lib testLib4libdbg testLib4libopt
   testLib6 testLib7 testLib8
@@ -614,7 +627,7 @@ install(
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
   )
-install(EXPORT exp NAMESPACE exp_ DESTINATION lib/exp)
+install(EXPORT exp NAMESPACE exp_ DESTINATION lib/exp EXPORT_PACKAGE_DEPENDENCIES)
 
 # Install testLib5.dll outside the export.
 if(WIN32)

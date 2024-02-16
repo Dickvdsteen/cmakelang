@@ -60,6 +60,13 @@ endfunction()
 __resolve_tool_path(CMAKE_LINKER "${_CMAKE_TOOLCHAIN_LOCATION}" "Default Linker")
 __resolve_tool_path(CMAKE_MT     "${_CMAKE_TOOLCHAIN_LOCATION}" "Default Manifest Tool")
 
+macro(__resolve_linker_path __linker_type __name __search_path __doc)
+  if(NOT CMAKE_LINKER_${__linker_type})
+    set( CMAKE_LINKER_${__linker_type} "${__name}")
+  endif()
+  __resolve_tool_path(CMAKE_LINKER_${__linker_type} "${__search_path}" "${__doc}")
+endmacro()
+
 set(_CMAKE_TOOL_VARS "")
 
 # if it's the MS C/CXX compiler, search for link
@@ -79,10 +86,10 @@ if(("x${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_SIMULATE_ID}" STREQUAL "xMSVC" AND
   set(_CMAKE_MT_NAMES "mt")
 
   # Prepend toolchain-specific names.
-  if("x${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_ID}" STREQUAL "xClang")
+  if("x${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_ID}" MATCHES "^x(Clang|LLVMFlang)$")
     set(_CMAKE_NM_NAMES "llvm-nm" "nm")
     list(PREPEND _CMAKE_AR_NAMES "llvm-lib")
-    # llvm-mt does not support all flags we need in vs_link_exe
+    # llvm-mt is not ready to be used as a replacement for mt.exe
     # list(PREPEND _CMAKE_MT_NAMES "llvm-mt")
     list(PREPEND _CMAKE_LINKER_NAMES "lld-link")
     list(APPEND _CMAKE_TOOL_VARS NM)
@@ -92,6 +99,10 @@ if(("x${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_SIMULATE_ID}" STREQUAL "xMSVC" AND
   endif()
 
   list(APPEND _CMAKE_TOOL_VARS LINKER MT AR)
+
+  # look-up for possible usable linker
+  __resolve_linker_path(LINK "link" "${_CMAKE_TOOLCHAIN_LOCATION}" "link Linker")
+  __resolve_linker_path(LLD "lld-link" "${_CMAKE_TOOLCHAIN_LOCATION}" "lld-link Linker")
 
 elseif("x${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_ID}" MATCHES "^x(Open)?Watcom$")
   set(_CMAKE_LINKER_NAMES "wlink")
@@ -121,9 +132,9 @@ elseif("x${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_ID}" MATCHES "^xIAR$")
   set(_CMAKE_IAR_ITOOLS "ARM" "RX" "RH850" "RL78" "RISCV" "RISC-V" "STM8")
   set(_CMAKE_IAR_XTOOLS "AVR" "MSP430" "V850" "8051")
 
-  if("${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_ARCHITECTURE_ID}" IN_LIST _CMAKE_IAR_ITOOLS)
-    string(TOLOWER "${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_ARCHITECTURE_ID}" _CMAKE_IAR_LOWER_ARCHITECTURE_ID)
+  string(TOLOWER "${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_ARCHITECTURE_ID}" _CMAKE_IAR_LOWER_ARCHITECTURE_ID)
 
+  if("${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_ARCHITECTURE_ID}" IN_LIST _CMAKE_IAR_ITOOLS)
     __append_IAR_tool(AR "iarchive")
     __append_IAR_tool(LINKER "ilink${_CMAKE_IAR_LOWER_ARCHITECTURE_ID}")
 
@@ -132,16 +143,21 @@ elseif("x${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_ID}" MATCHES "^xIAR$")
     __append_IAR_tool(IAR_OBJMANIP "iobjmanip")
     __append_IAR_tool(IAR_SYMEXPORT "isymexport")
 
-    unset(_CMAKE_IAR_LOWER_ARCHITECTURE_ID)
-
   elseif("${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_ARCHITECTURE_ID}" IN_LIST _CMAKE_IAR_XTOOLS)
     __append_IAR_tool(AR "xar")
-    __append_IAR_tool(LINKER "xlink")
+    if("${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_ARCHITECTURE_ID}" STREQUAL "AVR" AND
+      (CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_VERSION VERSION_GREATER_EQUAL 8))
+      # IAR UBROF Linker V8.10+ for Microchip AVR is `xlinkavr`
+      __append_IAR_tool(LINKER "xlink${_CMAKE_IAR_LOWER_ARCHITECTURE_ID}")
+    else()
+      __append_IAR_tool(LINKER "xlink")
+    endif()
 
   else()
     message(FATAL_ERROR "Failed to find linker and librarian for ${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_ID} on ${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_ARCHITECTURE_ID}.")
   endif()
 
+  unset(_CMAKE_IAR_LOWER_ARCHITECTURE_ID)
   unset(_CMAKE_IAR_ITOOLS)
   unset(_CMAKE_IAR_XTOOLS)
 
@@ -174,34 +190,24 @@ else()
     elseif(NOT APPLE)
       list(PREPEND _CMAKE_LINKER_NAMES "ld.lld")
     endif()
-    if(APPLE)
-      # llvm-ar does not generate a symbol table that the Apple ld64 linker accepts.
-      # FIXME(#23333): We still need to consider 'llvm-ar' as a fallback because
-      # the 'APPLE' definition may be based on the host in this context, and a
-      # cross-compiling toolchain may not have 'ar'.
-      list(APPEND _CMAKE_AR_NAMES "llvm-ar")
-    else()
+    # llvm-ar does not generate a symbol table that the Apple ld64 linker accepts.
+    if(NOT APPLE)
       list(PREPEND _CMAKE_AR_NAMES "llvm-ar")
     endif()
     list(PREPEND _CMAKE_RANLIB_NAMES "llvm-ranlib")
+    # llvm-strip versions prior to 11 require additional flags we do not yet add.
     if("${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_VERSION}" VERSION_GREATER_EQUAL 11)
-      # llvm-strip versions prior to 11 require additional flags we do not yet add.
-      if(APPLE)
-        # llvm-strip does not seem to support chained fixup format correctly.
-        # FIXME(#23333): We still need to consider 'llvm-strip' as a fallback
-        # because the 'APPLE' definition may be based on the host in this context,
-        # and a cross-compiling toolchain may not have 'strip'.
-        list(APPEND _CMAKE_STRIP_NAMES "llvm-strip")
-      else()
+      # llvm-strip does not seem to support chained fixup format on macOS correctly.
+      if(NOT APPLE)
         list(PREPEND _CMAKE_STRIP_NAMES "llvm-strip")
       endif()
     endif()
     list(PREPEND _CMAKE_NM_NAMES "llvm-nm")
     if("${CMAKE_${_CMAKE_PROCESSING_LANGUAGE}_COMPILER_VERSION}" VERSION_GREATER_EQUAL 9)
-      # llvm-objdump versions prior to 9 did not support everything we need.
+      # llvm-objcopy and llvm-objdump on versions prior to 9 did not support everything we need.
+      list(PREPEND _CMAKE_OBJCOPY_NAMES "llvm-objcopy")
       list(PREPEND _CMAKE_OBJDUMP_NAMES "llvm-objdump")
     endif()
-    list(PREPEND _CMAKE_OBJCOPY_NAMES "llvm-objcopy")
     list(PREPEND _CMAKE_READELF_NAMES "llvm-readelf")
     list(PREPEND _CMAKE_DLLTOOL_NAMES "llvm-dlltool")
     list(PREPEND _CMAKE_ADDR2LINE_NAMES "llvm-addr2line")
@@ -234,7 +240,7 @@ if(NOT CMAKE_RANLIB)
     set(CMAKE_RANLIB : CACHE INTERNAL "noop for ranlib")
 endif()
 
-if(NOT CMAKE_TAPI)
+if(APPLE AND "TAPI" IN_LIST _CMAKE_TOOL_VARS AND NOT CMAKE_TAPI)
   # try to pick-up from Apple toolchain
   execute_process(COMMAND xcrun --find tapi
     OUTPUT_VARIABLE _xcrun_out

@@ -14,6 +14,7 @@
 #include "cmCPackLog.h" // IWYU pragma: keep
 #include "cmDuration.h"
 #include "cmGeneratedFileStream.h"
+#include "cmList.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 #include "cmValue.h"
@@ -54,7 +55,6 @@ int cmCPackIFWGenerator::PackageFiles()
 std::vector<std::string> cmCPackIFWGenerator::BuildRepogenCommand()
 {
   std::vector<std::string> ifwCmd;
-  std::string ifwArg;
 
   ifwCmd.emplace_back(this->RepoGen);
 
@@ -103,7 +103,7 @@ std::vector<std::string> cmCPackIFWGenerator::BuildRepogenCommand()
   if (!this->OnlineOnly && !this->DownloadedPackages.empty()) {
     ifwCmd.emplace_back("-i");
     auto it = this->DownloadedPackages.begin();
-    ifwArg = (*it)->Name;
+    std::string ifwArg = (*it)->Name;
     ++it;
     while (it != this->DownloadedPackages.end()) {
       ifwArg += "," + (*it)->Name;
@@ -409,8 +409,8 @@ int cmCPackIFWGenerator::InitializeInternal()
 
   // Repositories
   if (cmValue RepoAllStr = this->GetOption("CPACK_IFW_REPOSITORIES_ALL")) {
-    std::vector<std::string> RepoAllVector = cmExpandedList(RepoAllStr);
-    for (std::string const& r : RepoAllVector) {
+    cmList RepoAllList{ RepoAllStr };
+    for (std::string const& r : RepoAllList) {
       this->GetRepository(r);
     }
   }

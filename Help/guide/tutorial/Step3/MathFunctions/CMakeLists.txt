@@ -14,5 +14,9 @@ if (USE_MYMATH)
               mysqrt.cxx
               )
 
-  target_link_libraries(MathFunctions PUBLIC SqrtLibrary)
+  # TODO 6: Link SqrtLibrary to tutorial_compiler_flags
+
+  target_link_libraries(MathFunctions PRIVATE SqrtLibrary)
 endif()
+
+# TODO 7: Link MathFunctions to tutorial_compiler_flags

@@ -17,6 +17,7 @@
 #include "cmGeneratorExpression.h"
 #include "cmGeneratorTarget.h"
 #include "cmGlobalGenerator.h"
+#include "cmList.h"
 #include "cmLocalGenerator.h"
 #include "cmMakefile.h"
 #include "cmStateTypes.h"
@@ -116,7 +117,7 @@ std::vector<std::string> EvaluateDepends(std::vector<std::string> const& paths,
                                /*outputConfig=*/outputConfig,
                                /*commandConfig=*/commandConfig,
                                /*target=*/nullptr);
-    cm::append(depends, cmExpandedList(ep));
+    cm::append(depends, cmList{ ep });
   }
   for (std::string& p : depends) {
     if (cmSystemTools::FileIsFullPath(p)) {
@@ -173,12 +174,6 @@ cmCustomCommandGenerator::cmCustomCommandGenerator(
   , EmulatorsWithArguments(cc.GetCommandLines().size())
   , ComputeInternalDepfile(std::move(computeInternalDepfile))
 {
-  if (!this->ComputeInternalDepfile) {
-    this->ComputeInternalDepfile =
-      [this](const std::string& cfg, const std::string& file) -> std::string {
-      return this->GetInternalDepfileName(cfg, file);
-    };
-  }
 
   cmGeneratorExpression ge(*lg->GetCMakeInstance(), cc.GetBacktrace());
   cmGeneratorTarget const* target{ lg->FindGeneratorTargetToUse(
@@ -196,7 +191,7 @@ cmCustomCommandGenerator::cmCustomCommandGenerator(
         clarg, ge, this->LG, useOutputConfig, this->OutputConfig,
         this->CommandConfig, target, &this->Utilities);
       if (this->CC->GetCommandExpandLists()) {
-        cm::append(argv, cmExpandedList(parsed_arg));
+        cm::append(argv, cmList{ parsed_arg });
       } else {
         argv.push_back(std::move(parsed_arg));
       }
@@ -289,8 +284,12 @@ void cmCustomCommandGenerator::FillEmulatorsWithArguments()
   if (!this->LG->GetMakefile()->IsOn("CMAKE_CROSSCOMPILING")) {
     return;
   }
+  cmGeneratorExpression ge(*this->LG->GetCMakeInstance(),
+                           this->CC->GetBacktrace());
 
   for (unsigned int c = 0; c < this->GetNumberOfCommands(); ++c) {
+    // If the command is the plain name of an executable target,
+    // launch it with its emulator.
     std::string const& argv0 = this->CommandLines[c][0];
     cmGeneratorTarget* target = this->LG->FindGeneratorTargetToUse(argv0);
     if (target && target->GetType() == cmStateEnums::EXECUTABLE &&
@@ -302,7 +301,12 @@ void cmCustomCommandGenerator::FillEmulatorsWithArguments()
         continue;
       }
 
-      cmExpandList(*emulator_property, this->EmulatorsWithArguments[c]);
+      // Plain target names are replaced by GetArgv0Location with the
+      // path to the executable artifact in the command config, so
+      // evaluate the launcher's location in the command config too.
+      std::string const emulator =
+        ge.Parse(*emulator_property)->Evaluate(this->LG, this->CommandConfig);
+      cmExpandList(emulator, this->EmulatorsWithArguments[c]);
     }
   }
 }
@@ -318,6 +322,8 @@ std::vector<std::string> cmCustomCommandGenerator::GetCrossCompilingEmulator(
 
 const char* cmCustomCommandGenerator::GetArgv0Location(unsigned int c) const
 {
+  // If the command is the plain name of an executable target, we replace it
+  // with the path to the executable artifact in the command config.
   std::string const& argv0 = this->CommandLines[c][0];
   cmGeneratorTarget* target = this->LG->FindGeneratorTargetToUse(argv0);
   if (target && target->GetType() == cmStateEnums::EXECUTABLE &&
@@ -331,9 +337,9 @@ const char* cmCustomCommandGenerator::GetArgv0Location(unsigned int c) const
 
 bool cmCustomCommandGenerator::HasOnlyEmptyCommandLines() const
 {
-  for (size_t i = 0; i < this->CommandLines.size(); ++i) {
-    for (size_t j = 0; j < this->CommandLines[i].size(); ++j) {
-      if (!this->CommandLines[i][j].empty()) {
+  for (cmCustomCommandLine const& ccl : this->CommandLines) {
+    for (std::string const& cl : ccl) {
+      if (!cl.empty()) {
         return false;
       }
     }
@@ -444,7 +450,7 @@ std::string cmCustomCommandGenerator::GetFullDepfile() const
 }
 
 std::string cmCustomCommandGenerator::GetInternalDepfileName(
-  const std::string& /*config*/, const std::string& depfile)
+  const std::string& /*config*/, const std::string& depfile) const
 {
   cmCryptoHash hash(cmCryptoHash::AlgoSHA256);
   std::string extension;
@@ -468,7 +474,10 @@ std::string cmCustomCommandGenerator::GetInternalDepfile() const
     return "";
   }
 
-  return this->ComputeInternalDepfile(this->OutputConfig, depfile);
+  if (this->ComputeInternalDepfile) {
+    return this->ComputeInternalDepfile(this->OutputConfig, depfile);
+  }
+  return this->GetInternalDepfileName(this->OutputConfig, depfile);
 }
 
 cm::optional<std::string> cmCustomCommandGenerator::GetComment() const

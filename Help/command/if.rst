@@ -170,11 +170,51 @@ File Operations
 
 .. signature:: if(EXISTS <path-to-file-or-directory>)
 
-  True if the named file or directory exists.  Behavior is well-defined
-  only for explicit full paths (a leading ``~/`` is not expanded as
-  a home directory and is considered a relative path).
+  True if the named file or directory exists and is readable.  Behavior
+  is well-defined only for explicit full paths (a leading ``~/`` is not
+  expanded as a home directory and is considered a relative path).
   Resolves symbolic links, i.e. if the named file or directory is a
   symbolic link, returns true if the target of the symbolic link exists.
+
+  False if the given path is an empty string.
+
+  .. note::
+    Prefer ``if(IS_READABLE)`` to check file readability.  ``if(EXISTS)``
+    may be changed in the future to to only check file existence.
+
+.. signature:: if(IS_READABLE <path-to-file-or-directory>)
+
+  .. versionadded:: 3.29
+
+  True if the named file or directory is readable.  Behavior
+  is well-defined only for explicit full paths (a leading ``~/`` is not
+  expanded as a home directory and is considered a relative path).
+  Resolves symbolic links, i.e. if the named file or directory is a
+  symbolic link, returns true if the target of the symbolic link is readable.
+
+  False if the given path is an empty string.
+
+.. signature:: if(IS_WRITABLE <path-to-file-or-directory>)
+
+  .. versionadded:: 3.29
+
+  True if the named file or directory is writable.  Behavior
+  is well-defined only for explicit full paths (a leading ``~/`` is not
+  expanded as a home directory and is considered a relative path).
+  Resolves symbolic links, i.e. if the named file or directory is a
+  symbolic link, returns true if the target of the symbolic link is writable.
+
+  False if the given path is an empty string.
+
+.. signature:: if(IS_EXECUTABLE <path-to-file-or-directory>)
+
+  .. versionadded:: 3.29
+
+  True if the named file or directory is executable.  Behavior
+  is well-defined only for explicit full paths (a leading ``~/`` is not
+  expanded as a home directory and is considered a relative path).
+  Resolves symbolic links, i.e. if the named file or directory is a
+  symbolic link, returns true if the target of the symbolic link is executable.
 
   False if the given path is an empty string.
 
@@ -228,36 +268,36 @@ Comparisons
 .. signature:: if(<variable|string> LESS <variable|string>)
   :target: LESS
 
-  True if the given string or variable's value is a valid number and less
-  than that on the right.
+  True if the given string or variable's value parses as a real number
+  (like a C ``double``) and less than that on the right.
 
 .. signature:: if(<variable|string> GREATER <variable|string>)
   :target: GREATER
 
-  True if the given string or variable's value is a valid number and greater
-  than that on the right.
+  True if the given string or variable's value parses as a real number
+  (like a C ``double``) and greater than that on the right.
 
 .. signature:: if(<variable|string> EQUAL <variable|string>)
   :target: EQUAL
 
-  True if the given string or variable's value is a valid number and equal
-  to that on the right.
+  True if the given string or variable's value parses as a real number
+  (like a C ``double``) and equal to that on the right.
 
 .. signature:: if(<variable|string> LESS_EQUAL <variable|string>)
   :target: LESS_EQUAL
 
   .. versionadded:: 3.7
 
-  True if the given string or variable's value is a valid number and less
-  than or equal to that on the right.
+  True if the given string or variable's value parses as a real number
+  (like a C ``double``) and less than or equal to that on the right.
 
 .. signature:: if(<variable|string> GREATER_EQUAL <variable|string>)
   :target: GREATER_EQUAL
 
   .. versionadded:: 3.7
 
-  True if the given string or variable's value is a valid number and greater
-  than or equal to that on the right.
+  True if the given string or variable's value parses as a real number
+  (like a C ``double``) and greater than or equal to that on the right.
 
 .. signature:: if(<variable|string> STRLESS <variable|string>)
   :target: STRLESS

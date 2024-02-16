@@ -44,11 +44,12 @@ public:
 
   bool IsUtf8EncodingSupported() const override;
 
+  bool IsScanDependenciesSupported() const override;
+
   const char* GetAndroidApplicationTypeRevision() const override;
 
-  bool CheckCxxModuleSupport() override
+  bool CheckCxxModuleSupport(CxxModuleSupportQuery /*query*/) override
   {
-    this->CxxModuleSupportCheck();
     return this->SupportsCxxModuleDyndep();
   }
   bool SupportsCxxModuleDyndep() const override
@@ -71,10 +72,8 @@ protected:
   // of the toolset is installed
   bool IsWindowsStoreToolsetInstalled() const;
 
-  bool InitializePlatformWindows(cmMakefile* mf) override;
-
   // Check for a Win 8 SDK known to the registry or VS installer tool.
-  bool IsWin81SDKInstalled() const;
+  bool IsWin81SDKInstalled() const override;
 
   std::string GetWindows10SDKMaxVersionDefault(cmMakefile*) const override;
 

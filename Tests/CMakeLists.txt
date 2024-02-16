@@ -42,8 +42,8 @@ endif()
 # Suppress generator deprecation warnings in test suite.
 if(CMAKE_GENERATOR MATCHES "^Visual Studio 9 2008")
   set(TEST_WARN_VS_CODE "set(ENV{CMAKE_WARN_VS9} OFF)")
-elseif(CMAKE_GENERATOR MATCHES "^Visual Studio 11 2012")
-  set(TEST_WARN_VS_CODE "set(ENV{CMAKE_WARN_VS11} OFF)")
+elseif(CMAKE_GENERATOR MATCHES "^Visual Studio 12 2013")
+  set(TEST_WARN_VS_CODE "set(ENV{CMAKE_WARN_VS12} OFF)")
 else()
   set(TEST_WARN_VS_CODE "")
 endif()
@@ -117,8 +117,8 @@ if(BUILD_TESTING)
   if(WIN32 OR CYGWIN)
     set(CMake_TEST_RESOURCES TRUE)
   endif()
-  # for borland and watcom there is no resource support
-  if(WATCOM OR BORLAND)
+  # For some Windows toolchains there is no resource support.
+  if(WATCOM OR BORLAND OR CMAKE_C_COMPILER_ID STREQUAL "OrangeC")
     set(CMake_TEST_RESOURCES FALSE)
   endif()
 
@@ -141,6 +141,13 @@ if(BUILD_TESTING)
       --build-makeprogram ${CMake_TEST_EXPLICIT_MAKE_PROGRAM}
       )
   endif()
+
+  if(_isMultiConfig)
+    set(test_options -C Debug)
+  endif()
+
+  # Look for git to use for tests.
+  find_program(GIT_EXECUTABLE NAMES git)
 
   # Look for rpmbuild to use for tests.
   # The tool does not work with spaces in the path.
@@ -406,6 +413,7 @@ if(BUILD_TESTING)
     PASS_REGULAR_EXPRESSION "CMake Error at CMakeLists.txt:3 \\(add_executable\\):[ \r\n]*Cannot find source file:[ \r\n]*DoesNotExist/MissingSourceFile.c")
   if(CMake_TEST_Swift)
     ADD_TEST_MACRO(SwiftOnly SwiftOnly)
+    ADD_TEST_MACRO(SwiftMixPCH SwiftMixPCH)
     if(CMake_TEST_XCODE_SWIFT)
       ADD_TEST_MACRO(SwiftMix SwiftMix)
     endif()
@@ -415,6 +423,7 @@ if(BUILD_TESTING)
   endif()
   if(CMAKE_Fortran_COMPILER)
     ADD_TEST_MACRO(FortranOnly FortranOnly)
+    set_property(TEST FortranOnly APPEND PROPERTY LABELS "Fortran")
   endif()
   # test Visual Studio GNU Fortran mixing with cmake_add_fortran_subdirectory
   # run this project if we have a working fortran compiler or
@@ -433,6 +442,10 @@ if(BUILD_TESTING)
         set(CMAKE_SKIP_VSGNUFortran TRUE)
       endif()
     endif()
+    if(CMAKE_Fortran_COMPILER_ID STREQUAL LLVMFlang)
+      # No DLLEXPORT for 'Tests/VSGNUFortran/subdir/fortran/world.f'.
+      set(CMAKE_SKIP_VSGNUFortran TRUE)
+    endif()
     if(CMAKE_Fortran_COMPILER_ID STREQUAL IntelLLVM)
       message(STATUS "Skip VSGNUFortran for ifx until DLLEXPORT support is implemented")
       set(CMAKE_SKIP_VSGNUFortran TRUE)
@@ -444,6 +457,7 @@ if(BUILD_TESTING)
     endif()
     if(NOT CMAKE_SKIP_VSGNUFortran)
       ADD_TEST_MACRO(VSGNUFortran ${CMAKE_CMAKE_COMMAND} -P runtest.cmake)
+      set_property(TEST VSGNUFortran APPEND PROPERTY LABELS "Fortran")
     endif()
   endif()
 
@@ -498,15 +512,18 @@ if(BUILD_TESTING)
   ADD_TEST_MACRO(PolicyScope PolicyScope)
   ADD_TEST_MACRO(EmptyLibrary EmptyLibrary)
   ADD_TEST_MACRO(CompileDefinitions CompileDefinitions)
-  if(CMAKE_Fortran_COMPILER)
-    set(CompileOptions_BUILD_OPTIONS -DTEST_FORTRAN=1)
-  endif()
+
   if(_isMultiConfig)
     set(CompileOptions_CTEST_OPTIONS --build-config $<CONFIGURATION>)
   else()
     set(CompileOptions_BUILD_OPTIONS -DCMAKE_BUILD_TYPE=$<CONFIGURATION>)
   endif()
+  if(CMAKE_Fortran_COMPILER)
+    list(APPEND CompileOptions_BUILD_OPTIONS -DTEST_FORTRAN=1)
+  endif()
   ADD_TEST_MACRO(CompileOptions CompileOptions)
+  set_property(TEST CompileOptions APPEND PROPERTY LABELS "Fortran")
+
   ADD_TEST_MACRO(CompatibleInterface CompatibleInterface)
   ADD_TEST_MACRO(AliasTarget AliasTarget)
   ADD_TEST_MACRO(StagingPrefix StagingPrefix)
@@ -649,6 +666,7 @@ if(BUILD_TESTING)
   if(CMAKE_Fortran_COMPILER)
     set(Module.CheckIPOSupported-Fortran_BUILD_OPTIONS -DCMake_TEST_IPO_WORKS_Fortran=${CMake_TEST_IPO_WORKS_Fortran})
     ADD_TEST_MACRO(Module.CheckIPOSupported-Fortran CheckIPOSupported-Fortran)
+    set_property(TEST Module.CheckIPOSupported-Fortran APPEND PROPERTY LABELS "Fortran")
   endif()
 
   add_test(Module.ExternalData ${CMAKE_CTEST_COMMAND}
@@ -985,6 +1003,30 @@ if(BUILD_TESTING)
         ATTACHED_FILES_ON_FAIL
         "${CMake_BINARY_DIR}/Tests/CPackWiXGenerator/_CPack_Packages/win32/WIX/wix.log")
     endif()
+  endif()
+
+  # On Windows run the CPackInnoSetupGenerator test
+  if(WIN32 AND CMake_TEST_CPACK_INNOSETUP)
+    add_test(CPackInnoSetupGenerator ${CMAKE_CTEST_COMMAND}
+      -C \${CTEST_CONFIGURATION_TYPE}
+      --build-and-test
+      "${CMake_SOURCE_DIR}/Tests/CPackInnoSetupGenerator"
+      "${CMake_BINARY_DIR}/Tests/CPackInnoSetupGenerator"
+      ${build_generator_args}
+      --build-project CPackInnoSetupGenerator
+      --build-options
+      --test-command ${CMAKE_CMAKE_COMMAND}
+      "-DCPackInnoSetupGenerator_BINARY_DIR:PATH=${CMake_BINARY_DIR}/Tests/CPackInnoSetupGenerator"
+      "-Dconfig=\${CTEST_CONFIGURATION_TYPE}"
+      -P "${CMake_SOURCE_DIR}/Tests/CPackInnoSetupGenerator/RunCPackVerifyResult.cmake")
+
+    set_property(TEST CPackInnoSetupGenerator PROPERTY
+      ATTACHED_FILES_ON_FAIL
+      "${CMake_BINARY_DIR}/Tests/CPackInnoSetupGenerator/_CPack_Packages/win32/INNOSETUP/ISCCOutput.log")
+
+    set_property(TEST CPackInnoSetupGenerator PROPERTY
+      ATTACHED_FILES
+      "${CMake_BINARY_DIR}/Tests/CPackInnoSetupGenerator/_CPack_Packages/win32/INNOSETUP/ISScript.iss")
   endif()
 
   # On Windows run the CPackNSISGenerator test
@@ -1514,10 +1556,40 @@ if(BUILD_TESTING)
     add_subdirectory(GoogleTest)
   endif()
 
-  if(CMake_TEST_FindPython OR CMake_TEST_FindPython_SABIModule OR CMake_TEST_FindPython_NumPy
-      OR CMake_TEST_FindPython_Conda OR CMake_TEST_FindPython_IronPython OR CMake_TEST_FindPython_PyPy)
-    if (CMake_TEST_FindPython AND CMAKE_SYSTEM_NAME MATCHES "Linux|Darwin")
-      set(CMake_TEST_FindPython_SABIModule TRUE)
+  if(CMake_TEST_FindPython)
+    set(CMake_TEST_FindPython2 TRUE)
+    set(CMake_TEST_FindPython3 TRUE)
+  endif()
+  if(CMake_TEST_FindPython_SABIMOdule)
+    set(CMake_TEST_FindPython2_SABIModule TRUE)
+    set(CMake_TEST_FindPython3_SABIModule TRUE)
+  endif()
+  if(CMake_TEST_FindPython_NumPy)
+    set(CMake_TEST_FindPython2_NumPyy TRUE)
+    set(CMake_TEST_FindPython3_NumPy TRUE)
+  endif()
+  if(CMake_TEST_FindPython_Conda)
+    set(CMake_TEST_FindPython3_Conda TRUE)
+  endif()
+  if(CMake_TEST_FindPython_IronPython)
+    set(CMake_TEST_FindPython2_IronPython TRUE)
+    set(CMake_TEST_FindPython3_IronPython TRUE)
+  endif()
+  if(CMake_TEST_FindPython_PyPy)
+    set(CMake_TEST_FindPython2_PyPy TRUE)
+    set(CMake_TEST_FindPython3_PyPy TRUE)
+  endif()
+  if(CMake_TEST_FindPython2 OR CMake_TEST_FindPython3
+      OR CMake_TEST_FindPython2_SABIModule OR CMake_TEST_FindPython3_SABIModule
+      OR CMake_TEST_FindPython2_NumPy OR CMake_TEST_FindPython3_NumPy
+      OR CMake_TEST_FindPython3_Conda
+      OR CMake_TEST_FindPython2_IronPython OR CMake_TEST_FindPython3_IronPython
+      OR CMake_TEST_FindPython2_PyPy OR CMake_TEST_FindPython3_PyPy)
+    if (CMake_TEST_FindPython2 AND CMAKE_SYSTEM_NAME MATCHES "Linux|Darwin")
+      set(CMake_TEST_FindPython2_SABIModule TRUE)
+    endif()
+    if (CMake_TEST_FindPython3 AND CMAKE_SYSTEM_NAME MATCHES "Linux|Darwin")
+      set(CMake_TEST_FindPython3_SABIModule TRUE)
     endif()
     add_subdirectory(FindPython)
   endif()
@@ -2034,7 +2106,10 @@ if(BUILD_TESTING)
       )
   endif()
 
-  if(MAKE_SUPPORTS_SPACES AND NOT CMAKE_GENERATOR STREQUAL "Xcode" AND NOT CMAKE_GENERATOR STREQUAL "Watcom WMake")
+  if(MAKE_SUPPORTS_SPACES
+      AND NOT CMAKE_GENERATOR STREQUAL "Xcode"
+      AND NOT CMAKE_GENERATOR STREQUAL "Watcom WMake"
+      )
     add_test(SubDirSpaces ${CMAKE_CTEST_COMMAND}
       --build-and-test
       "${CMake_SOURCE_DIR}/Tests/SubDirSpaces"
@@ -2092,7 +2167,7 @@ if(BUILD_TESTING)
     endif()
     ADD_TEST_MACRO(MSVCDebugInformationFormat)
     set_property(TEST MSVCDebugInformationFormat APPEND
-      PROPERTY LABELS "CUDA")
+      PROPERTY LABELS "CUDA" "Fortran")
 
     set(MSVCRuntimeLibrary_BUILD_OPTIONS -DCMake_TEST_CUDA=${CMake_TEST_CUDA})
     ADD_TEST_MACRO(MSVCRuntimeLibrary)
@@ -2100,6 +2175,7 @@ if(BUILD_TESTING)
       PROPERTY LABELS "CUDA")
     if(CMAKE_Fortran_COMPILER)
       ADD_TEST_MACRO(MSVCRuntimeLibrary.Fortran)
+      set_property(TEST MSVCRuntimeLibrary.Fortran APPEND PROPERTY LABELS "Fortran")
     endif()
   endif()
   if(MSVC OR
@@ -2253,11 +2329,6 @@ if(BUILD_TESTING)
       list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/VSWinStorePhone/${name}")
     endmacro()
 
-    if(vs11 AND ws80)
-      add_test_VSWinStorePhone(vs11-store80-X86 "Visual Studio 11 2012" WindowsStore 8.0 Win32)
-      add_test_VSWinStorePhone(vs11-store80-ARM "Visual Studio 11 2012" WindowsStore 8.0 ARM)
-      add_test_VSWinStorePhone(vs11-store80-X64 "Visual Studio 11 2012" WindowsStore 8.0 x64)
-    endif()
     if(vs12 AND ws81)
       add_test_VSWinStorePhone(vs12-store81-X86 "Visual Studio 12 2013" WindowsStore 8.1 Win32)
       add_test_VSWinStorePhone(vs12-store81-ARM "Visual Studio 12 2013" WindowsStore 8.1 ARM)
@@ -2285,10 +2356,6 @@ if(BUILD_TESTING)
       add_test_VSWinStorePhone(vs14-store10_0-ARM "Visual Studio 14 2015" WindowsStore 10.0 ARM)
       add_test_VSWinStorePhone(vs14-store10_0-X64 "Visual Studio 14 2015" WindowsStore 10.0 x64)
     endif()
-    if(vs11 AND wp80)
-      add_test_VSWinStorePhone(vs11-phone80-X86 "Visual Studio 11 2012" WindowsPhone 8.0 Win32)
-      add_test_VSWinStorePhone(vs11-phone80-ARM "Visual Studio 11 2012" WindowsPhone 8.0 ARM)
-    endif()
     if(vs12 AND wp81)
       add_test_VSWinStorePhone(vs12-phone81-X86 "Visual Studio 12 2013" WindowsPhone 8.1 Win32)
       add_test_VSWinStorePhone(vs12-phone81-ARM "Visual Studio 12 2013" WindowsPhone 8.1 ARM)
@@ -2314,10 +2381,6 @@ if(BUILD_TESTING)
         list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/Tutorial/Step${STP}_${name}")
       endforeach()
     endmacro()
-
-    if(vs11)
-      add_test_VSWinCE(vs11-ce80-ARM "Visual Studio 11 2012" WindowsCE 8.0 ${wince_sdk})
-    endif()
 
     if(vs12)
       add_test_VSWinCE(vs12-ce80-ARM "Visual Studio 12 2013" WindowsCE 8.0 ${wince_sdk})
@@ -2445,9 +2508,6 @@ if(BUILD_TESTING)
     list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/VSAndroid/${name}")
   endmacro()
   if(tegra AND NOT "${CMake_SOURCE_DIR};${CMake_BINARY_DIR}" MATCHES " ")
-    if(vs11)
-      add_test_VSAndroid(vs11 "Visual Studio 11 2012" "Tegra-Android")
-    endif()
     if(vs12)
       add_test_VSAndroid(vs12 "Visual Studio 12 2013" "Tegra-Android")
     endif()
@@ -2665,10 +2725,6 @@ if(BUILD_TESTING)
   endif()
 
   # Test CTest Update with GIT
-  if(NOT DEFINED CMake_TEST_CTestUpdate_GIT OR CMake_TEST_CTestUpdate_GIT)
-    find_program(GIT_EXECUTABLE NAMES git)
-    mark_as_advanced(GIT_EXECUTABLE)
-  endif()
   if(NOT DEFINED CMake_TEST_CTestUpdate_GIT AND GIT_EXECUTABLE
       AND (UNIX OR NOT "${GIT_EXECUTABLE}" MATCHES "cygwin"))
     set(CMake_TEST_CTestUpdate_GIT 1)
@@ -2728,29 +2784,6 @@ if(BUILD_TESTING)
       )
     list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/${CTestUpdateP4_DIR}")
   endif()
-
-  configure_file(
-    "${CMake_SOURCE_DIR}/Tests/CTestTestFailure/testNoBuild.cmake.in"
-    "${CMake_BINARY_DIR}/Tests/CTestTestFailure/testNoBuild.cmake"
-    @ONLY ESCAPE_QUOTES)
-  add_test(CTestTestNoBuild ${CMAKE_CTEST_COMMAND}
-    -S "${CMake_BINARY_DIR}/Tests/CTestTestFailure/testNoBuild.cmake" -V
-    --output-log "${CMake_BINARY_DIR}/Tests/CTestTestFailure/testOut1.log"
-    )
-  set_tests_properties(CTestTestNoBuild PROPERTIES
-    FAIL_REGULAR_EXPRESSION "Error" WILL_FAIL true)
-
-  configure_file(
-    "${CMake_SOURCE_DIR}/Tests/CTestTestFailure/testNoExe.cmake.in"
-    "${CMake_BINARY_DIR}/Tests/CTestTestFailure/testNoExe.cmake"
-    @ONLY ESCAPE_QUOTES)
-  add_test(CTestTestNoExe ${CMAKE_CTEST_COMMAND}
-    -S "${CMake_BINARY_DIR}/Tests/CTestTestFailure/testNoExe.cmake" -V
-    --output-log "${CMake_BINARY_DIR}/Tests/CTestTestFailure/testOut2.log"
-    )
-  set_tests_properties(CTestTestNoExe PROPERTIES DEPENDS CTestTestNoBuild
-    PASS_REGULAR_EXPRESSION "Could not find executable"
-    FAIL_REGULAR_EXPRESSION "SegFault")
 
   if(NOT CMake_TEST_NO_NETWORK)
     configure_file(
@@ -2983,8 +3016,8 @@ if(BUILD_TESTING)
     -S "${CMake_BINARY_DIR}/Tests/CTestTestCrash/test.cmake" -V
     --output-log "${CMake_BINARY_DIR}/Tests/CTestTestCrash/testOutput.log"
     )
-  # with watcom the SEGFAULT is not found, it just fails
-  if(CMAKE_GENERATOR MATCHES "Watcom WMake")
+  # With Watcom and OrangeC the SEGFAULT is not found, it just fails
+  if(CMAKE_GENERATOR MATCHES "Watcom WMake" OR CMAKE_C_COMPILER_ID STREQUAL "OrangeC")
     set_tests_properties(CTestTestCrash PROPERTIES
       PASS_REGULAR_EXPRESSION "Failed")
   else()
@@ -3169,17 +3202,6 @@ if(BUILD_TESTING)
     WORKING_DIRECTORY ${CMake_BINARY_DIR}/Tests/CTestTestTimeout)
 
   configure_file(
-    "${CMake_SOURCE_DIR}/Tests/CTestTestZeroTimeout/test.cmake.in"
-    "${CMake_BINARY_DIR}/Tests/CTestTestZeroTimeout/test.cmake"
-    @ONLY ESCAPE_QUOTES)
-  add_test(CTestTestZeroTimeout ${CMAKE_CTEST_COMMAND}
-    -S "${CMake_BINARY_DIR}/Tests/CTestTestZeroTimeout/test.cmake" -V
-    --output-log
-    "${CMake_BINARY_DIR}/Tests/CTestTestZeroTimeout/testOutput.log")
-  set_tests_properties(CTestTestZeroTimeout PROPERTIES
-    FAIL_REGULAR_EXPRESSION "\\*\\*\\*Timeout")
-
-  configure_file(
     "${CMake_SOURCE_DIR}/Tests/CTestTestDepends/test.cmake.in"
     "${CMake_BINARY_DIR}/Tests/CTestTestDepends/test.cmake"
     @ONLY ESCAPE_QUOTES)
@@ -3253,7 +3275,7 @@ if(BUILD_TESTING)
     if(NOT CMake_TEST_EXTERNAL_CMAKE)
       configure_file("${CMake_SOURCE_DIR}/Tests/CTestTest2/test.cmake.in"
         "${CMake_BINARY_DIR}/Tests/CTestTest2/test.cmake" @ONLY ESCAPE_QUOTES)
-      add_test(CTestTest2 ${CMAKE_CTEST_COMMAND}
+      add_test(NAME CTestTest2 COMMAND ${CMAKE_CTEST_COMMAND} -C $<CONFIG>
         -S "${CMake_BINARY_DIR}/Tests/CTestTest2/test.cmake" -V
         --output-log "${CMake_BINARY_DIR}/Tests/CTestTest2/testOutput.log"
         )
@@ -3279,7 +3301,7 @@ if(BUILD_TESTING)
       "${CMake_BINARY_DIR}/Tests/CTestTestChecksum/testOutput.log"
       )
     set_tests_properties(CTestTestChecksum PROPERTIES PASS_REGULAR_EXPRESSION
-      "Submission failed: Checksum failed for file")
+      "md5 mismatch")
 
     # these tests take a long time, make sure they have it
     # if timeouts have not already been set
@@ -3298,18 +3320,20 @@ if(BUILD_TESTING)
     endif()
   endif()
 
-  if(CMake_TEST_EXTERNAL_CMAKE)
-    set(CMAKE_SKIP_BOOTSTRAP_TEST 1)
-  endif()
-  if("${CMAKE_GENERATOR}" MATCHES Xcode)
-    set(CMAKE_SKIP_BOOTSTRAP_TEST 1)
-  endif()
-  if(EXISTS "${CMake_BINARY_DIR}/CMakeLists.txt")
-    # If there is CMakeLists.txt in the binary tree, assume in-source build
-    set(CMAKE_SKIP_BOOTSTRAP_TEST 1)
+  if(NOT DEFINED CMake_TEST_BOOTSTRAP)
+    if(CMAKE_RUN_LONG_TESTS
+        AND NOT CMAKE_SKIP_BOOTSTRAP_TEST
+        AND NOT CMake_TEST_EXTERNAL_CMAKE
+        AND NOT CMAKE_GENERATOR MATCHES "Xcode"
+        AND NOT EXISTS "${CMake_BINARY_DIR}/CMakeLists.txt"
+        )
+      set(CMake_TEST_BOOTSTRAP 1)
+    else()
+      set(CMake_TEST_BOOTSTRAP 0)
+    endif()
   endif()
   set(bootstrap "")
-  if(CMAKE_RUN_LONG_TESTS AND NOT CMAKE_SKIP_BOOTSTRAP_TEST)
+  if(CMake_TEST_BOOTSTRAP)
     if(UNIX)
       set(bootstrap ${CMake_SOURCE_DIR}/bootstrap)
     elseif(MSYS)
@@ -3328,13 +3352,12 @@ if(BUILD_TESTING)
       )
     list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/BootstrapTest")
     # This test will use all processors.
-    set_tests_properties(BootstrapTest PROPERTIES RUN_SERIAL 1)
-
-    # provide more time for the bootstrap test
-    get_test_property(BootstrapTest TIMEOUT PREVIOUS_TIMEOUT)
-    if("${PREVIOUS_TIMEOUT}" MATCHES NOTFOUND)
-      set_tests_properties(BootstrapTest PROPERTIES TIMEOUT 5400)
+    set_property(TEST BootstrapTest PROPERTY RUN_SERIAL 1)
+    # This test may take a long time.
+    if(NOT DEFINED CMake_TEST_BOOTSTRAP_TIMEOUT)
+      set(CMake_TEST_BOOTSTRAP_TIMEOUT 5400)
     endif()
+    set_property(TEST BootstrapTest PROPERTY TIMEOUT "${CMake_TEST_BOOTSTRAP_TIMEOUT}")
   endif()
 
   if(CMAKE_Fortran_COMPILER)
@@ -3347,6 +3370,7 @@ if(BUILD_TESTING)
       --build-two-config
       --test-command testf)
     list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/Fortran")
+    set_property(TEST Fortran APPEND PROPERTY LABELS "Fortran")
 
     if(CMAKE_Fortran_COMPILER_SUPPORTS_F90)
       add_test(FortranModules ${CMAKE_CTEST_COMMAND}
@@ -3361,6 +3385,7 @@ if(BUILD_TESTING)
           ${CMake_TEST_FortranModules_BUILD_OPTIONS}
         )
       list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/FortranModules")
+      set_property(TEST FortranModules APPEND PROPERTY LABELS "Fortran")
     endif()
 
     # FortranCInterface tests.
@@ -3370,6 +3395,7 @@ if(BUILD_TESTING)
       add_test(FortranC.Flags ${CMAKE_CMAKE_COMMAND} -P
         ${CMAKE_CURRENT_BINARY_DIR}/FortranC/Flags.cmake)
       list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/FortranC/Flags")
+      set_property(TEST FortranC.Flags APPEND PROPERTY LABELS "Fortran")
     else()
       add_test(FortranC ${CMAKE_CTEST_COMMAND}
         --build-and-test
@@ -3380,6 +3406,7 @@ if(BUILD_TESTING)
         --build-two-config
         --test-command CMakeFiles/FortranCInterface/FortranCInterface)
       list(APPEND TEST_BUILD_DIRS "${CMake_BINARY_DIR}/Tests/FortranC")
+      set_property(TEST FortranC APPEND PROPERTY LABELS "Fortran")
     endif()
   endif()
 

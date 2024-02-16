@@ -22,6 +22,7 @@
 #include "cmCurl.h"
 #include "cmDuration.h"
 #include "cmGeneratedFileStream.h"
+#include "cmList.h"
 #include "cmState.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
@@ -137,12 +138,24 @@ void cmCTestSubmitHandler::Initialize()
   this->Files.clear();
 }
 
+int cmCTestSubmitHandler::ProcessCommandLineArguments(
+  const std::string& currentArg, size_t& idx,
+  const std::vector<std::string>& allArgs)
+{
+  if (cmHasLiteralPrefix(currentArg, "--http-header") &&
+      idx < allArgs.size() - 1) {
+    ++idx;
+    this->HttpHeaders.push_back(allArgs[idx]);
+    this->CommandLineHttpHeaders.push_back(allArgs[idx]);
+  }
+  return 1;
+}
+
 bool cmCTestSubmitHandler::SubmitUsingHTTP(
   const std::string& localprefix, const std::vector<std::string>& files,
   const std::string& remoteprefix, const std::string& url)
 {
   CURL* curl;
-  CURLcode res;
   FILE* ftpfile;
   char error_buffer[1024];
   // Set Content-Type to satisfy fussy modsecurity rules.
@@ -160,7 +173,7 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(
   /* In windows, this will init the winsock stuff */
   ::curl_global_init(CURL_GLOBAL_ALL);
   std::string curlopt(this->CTest->GetCTestConfiguration("CurlOptions"));
-  std::vector<std::string> args = cmExpandedList(curlopt);
+  cmList args{ curlopt };
   bool verifyPeerOff = false;
   bool verifyHostOff = false;
   for (std::string const& arg : args) {
@@ -210,8 +223,6 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(
       if (this->CTest->ShouldUseHTTP10()) {
         curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
       }
-      // enable HTTP ERROR parsing
-      curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1);
       /* enable uploading */
       curl_easy_setopt(curl, CURLOPT_UPLOAD, 1);
 
@@ -285,10 +296,10 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(
       upload_as += "&MD5=";
 
       if (cmIsOn(this->GetOption("InternalTest"))) {
-        upload_as += "bad_md5sum";
+        upload_as += "ffffffffffffffffffffffffffffffff";
       } else {
-        upload_as +=
-          cmSystemTools::ComputeFileHash(local_file, cmCryptoHash::AlgoMD5);
+        cmCryptoHash hasher(cmCryptoHash::AlgoMD5);
+        upload_as += hasher.HashFile(local_file);
       }
 
       if (!cmSystemTools::FileExists(local_file)) {
@@ -310,6 +321,9 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(
 
       // specify target
       ::curl_easy_setopt(curl, CURLOPT_URL, upload_as.c_str());
+
+      // follow redirects
+      ::curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
 
       // CURLAUTH_BASIC is default, and here we allow additional methods,
       // including more secure ones
@@ -337,7 +351,7 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(
       ::curl_easy_setopt(curl, CURLOPT_DEBUGDATA, &chunkDebug);
 
       // Now run off and do what you've been told!
-      res = ::curl_easy_perform(curl);
+      ::curl_easy_perform(curl);
 
       if (!chunk.empty()) {
         cmCTestOptionalLog(this->CTest, DEBUG,
@@ -358,7 +372,11 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(
 
       // If curl failed for any reason, or checksum fails, wait and retry
       //
-      if (res != CURLE_OK || this->HasErrors) {
+      long response_code;
+      curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+      bool successful_submission = response_code == 200;
+
+      if (!successful_submission || this->HasErrors) {
         std::string retryDelay = *this->GetOption("RetryDelay");
         std::string retryCount = *this->GetOption("RetryCount");
 
@@ -396,7 +414,7 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(
           chunkDebug.clear();
           this->HasErrors = false;
 
-          res = ::curl_easy_perform(curl);
+          ::curl_easy_perform(curl);
 
           if (!chunk.empty()) {
             cmCTestOptionalLog(this->CTest, DEBUG,
@@ -407,14 +425,16 @@ bool cmCTestSubmitHandler::SubmitUsingHTTP(
             this->ParseResponse(chunk);
           }
 
-          if (res == CURLE_OK && !this->HasErrors) {
+          curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+          if (response_code == 200 && !this->HasErrors) {
+            successful_submission = true;
             break;
           }
         }
       }
 
       fclose(ftpfile);
-      if (res) {
+      if (!successful_submission) {
         cmCTestLog(this->CTest, ERROR_MESSAGE,
                    "   Error when uploading file: " << local_file
                                                     << std::endl);
@@ -499,7 +519,7 @@ int cmCTestSubmitHandler::HandleCDashUploadFile(std::string const& file,
   cmCTestCurl curl(this->CTest);
   curl.SetQuiet(this->Quiet);
   std::string curlopt(this->CTest->GetCTestConfiguration("CurlOptions"));
-  std::vector<std::string> args = cmExpandedList(curlopt);
+  cmList args{ curlopt };
   curl.SetCurlOptions(args);
   auto submitInactivityTimeout = this->GetSubmitInactivityTimeout();
   if (submitInactivityTimeout != 0) {
@@ -545,8 +565,8 @@ int cmCTestSubmitHandler::HandleCDashUploadFile(std::string const& file,
     }
   }
 
-  std::string md5sum =
-    cmSystemTools::ComputeFileHash(file, cmCryptoHash::AlgoMD5);
+  cmCryptoHash hasher(cmCryptoHash::AlgoMD5);
+  std::string md5sum = hasher.HashFile(file);
   // 1. request the buildid and check to see if the file
   //    has already been uploaded
   // TODO I added support for subproject. You would need to add

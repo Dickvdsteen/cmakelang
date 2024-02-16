@@ -44,6 +44,7 @@
                 "^empty\\.cxx$"
             ],
             "includes": null,
+            "frameworks": null,
             "defines": [
                 {
                     "define": "cxx_shared_lib_EXPORTS",
@@ -75,7 +76,7 @@
             "_dllExtra": false
         },
         {
-            "path": "^cxx/((Debug|Release|RelWithDebInfo|MinSizeRel)/)?(lib)?cxx_shared_lib\\.(dll\\.a|lib)$",
+            "path": "^cxx/((Debug|Release|RelWithDebInfo|MinSizeRel)/)?(lib)?cxx_shared_lib\\.(dll\\.a|lib|l)$",
             "_dllExtra": true
         },
         {
@@ -93,7 +94,7 @@
                 "backtrace": [
                     {
                         "file": "^codemodel-v2\\.cmake$",
-                        "line": 45,
+                        "line": 46,
                         "command": "install",
                         "hasParent": true
                     },
@@ -123,7 +124,7 @@
                 "backtrace": [
                     {
                         "file": "^codemodel-v2\\.cmake$",
-                        "line": 45,
+                        "line": 46,
                         "command": "install",
                         "hasParent": true
                     },
@@ -153,7 +154,7 @@
                 "backtrace": [
                     {
                         "file": "^codemodel-v2\\.cmake$",
-                        "line": 50,
+                        "line": 51,
                         "command": "install",
                         "hasParent": true
                     },

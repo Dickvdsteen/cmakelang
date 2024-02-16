@@ -2,7 +2,6 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmExportTryCompileFileGenerator.h"
 
-#include <map>
 #include <utility>
 
 #include <cm/memory>
@@ -12,7 +11,7 @@
 #include "cmGeneratorExpressionDAGChecker.h"
 #include "cmGeneratorTarget.h"
 #include "cmGlobalGenerator.h"
-#include "cmListFileCache.h"
+#include "cmList.h"
 #include "cmLocalGenerator.h"
 #include "cmMakefile.h"
 #include "cmOutputConverter.h"
@@ -126,7 +125,7 @@ void cmExportTryCompileFileGenerator::PopulateProperties(
       std::string evalResult =
         this->FindTargets(p, target, std::string(), emitted);
 
-      std::vector<std::string> depends = cmExpandedList(evalResult);
+      cmList depends{ evalResult };
       for (std::string const& li : depends) {
         cmGeneratorTarget* tgt =
           target->GetLocalGenerator()->FindGeneratorTargetToUse(li);
@@ -155,12 +154,12 @@ std::string cmExportTryCompileFileGenerator::GetFileSetDirectories(
   cmGeneratorTarget* /*gte*/, cmFileSet* fileSet, cmTargetExport* /*te*/)
 {
   return cmOutputConverter::EscapeForCMake(
-    cmJoin(fileSet->GetDirectoryEntries(), ";"));
+    cmList::to_string(fileSet->GetDirectoryEntries()));
 }
 
 std::string cmExportTryCompileFileGenerator::GetFileSetFiles(
   cmGeneratorTarget* /*gte*/, cmFileSet* fileSet, cmTargetExport* /*te*/)
 {
   return cmOutputConverter::EscapeForCMake(
-    cmJoin(fileSet->GetFileEntries(), ";"));
+    cmList::to_string(fileSet->GetFileEntries()));
 }

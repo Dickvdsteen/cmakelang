@@ -41,6 +41,15 @@ The files are a JSON document with an object as the root:
 
 The root object recognizes the following fields:
 
+``$schema``
+  An optional string that provides a URI to the JSON schema that describes the
+  structure of this JSON document. This field is used for validation and
+  autocompletion in editors that support JSON schema. It doesn't affect the
+  behavior of the document itself. If this field is not specified, the JSON
+  document will still be valid, but tools that use JSON schema for validation
+  and autocompletion may not function correctly.
+  This is allowed in preset files specifying version ``8`` or above.
+
 ``version``
   A required integer representing the version of the JSON schema.
   The supported versions are:
@@ -65,6 +74,9 @@ The root object recognizes the following fields:
 
   ``7``
     .. versionadded:: 3.27
+
+  ``8``
+    .. versionadded:: 3.28
 
 ``cmakeMinimumRequired``
   An optional object representing the minimum version of CMake needed to
@@ -132,6 +144,9 @@ included multiple times from the same file or from different files.
 Files directly or indirectly included from ``CMakePresets.json`` should be
 guaranteed to be provided by the project. ``CMakeUserPresets.json`` may
 include files from anywhere.
+
+Starting from version ``7``, the ``include`` field supports
+`macro expansion`_, but only ``$penv{}`` macro expansion.
 
 Configure Preset
 ^^^^^^^^^^^^^^^^
@@ -1056,6 +1071,12 @@ fields:
   ``CMakeUserPresets.json`` in the same directory with the same name. However,
   a workflow preset may have the same name as a configure, build, test, or
   package preset.
+
+``vendor``
+  An optional map containing vendor-specific information. CMake does not
+  interpret the contents of this field except to verify that it is a map
+  if it does exist. However, it should follow the same conventions as the
+  root-level ``vendor`` field.
 
 ``displayName``
   An optional string with a human-friendly name of the preset.

@@ -35,25 +35,32 @@
     variables:
         VCVARSALL: "${VS170COMNTOOLS}\\..\\..\\VC\\Auxiliary\\Build\\vcvarsall.bat"
         VCVARSPLATFORM: "x64"
-        VCVARSVERSION: "14.35.32215"
+        VCVARSVERSION: "14.36.32532"
 
 .windows_vcvarsall_vs2022_x86:
     variables:
         VCVARSALL: "${VS170COMNTOOLS}\\..\\..\\VC\\Auxiliary\\Build\\vcvarsall.bat"
         VCVARSPLATFORM: "x86"
-        VCVARSVERSION: "14.35.32215"
+        VCVARSVERSION: "14.36.32532"
 
 .windows_vcvarsall_vs2022_x64_arm64:
     variables:
         VCVARSALL: "${VS170COMNTOOLS}\\..\\..\\VC\\Auxiliary\\Build\\vcvarsall.bat"
         VCVARSPLATFORM: "x64_arm64"
-        VCVARSVERSION: "14.35.32215"
+        VCVARSVERSION: "14.36.32532"
 
 .windows_arm64_vcvarsall_vs2022:
     variables:
         VCVARSALL: "${VS170COMNTOOLS}\\..\\..\\VC\\Auxiliary\\Build\\vcvarsall.bat"
         VCVARSPLATFORM: "arm64"
-        VCVARSVERSION: "14.35.32215"
+        VCVARSVERSION: "14.36.32532"
+
+.windows_vs2022_x64_pch:
+    extends:
+        - .windows_vs2022_x64_ninja
+
+    variables:
+        CMAKE_CONFIGURATION: windows_vs2022_x64_pch
 
 .windows_vs2022_x64_ninja:
     extends:
@@ -112,7 +119,7 @@
         CMAKE_CONFIGURATION: windows_vs2022_x64
         CMAKE_GENERATOR: "Visual Studio 17 2022"
         CMAKE_GENERATOR_PLATFORM: "x64"
-        CMAKE_GENERATOR_TOOLSET: "v143,version=14.35.32215"
+        CMAKE_GENERATOR_TOOLSET: "v143,version=14.36.32532"
         CMAKE_CI_NIGHTLY_IGNORE_DEPS: "true"
 
 .windows_vs2019_x64:
@@ -222,6 +229,22 @@
     variables:
         CMAKE_CONFIGURATION: windows_msvc_v71_nmake
 
+.windows_intelclassic_ninja:
+    extends:
+        - .windows_ninja
+        - .windows_vcvarsall_vs2022_x64
+
+    variables:
+        CMAKE_CONFIGURATION: windows_intelclassic_ninja
+
+.windows_inteloneapi_ninja:
+    extends:
+        - .windows_ninja
+        - .windows_vcvarsall_vs2022_x64
+
+    variables:
+        CMAKE_CONFIGURATION: windows_inteloneapi_ninja
+
 .windows_openwatcom:
     extends: .windows
 
@@ -238,6 +261,20 @@
     variables:
         CMAKE_CONFIGURATION: windows_openwatcom1.9
 
+.windows_orangec:
+    extends: .windows
+
+    variables:
+        CMAKE_GENERATOR: "Ninja"
+        CMAKE_CI_BUILD_TYPE: Release
+        CMAKE_CI_NIGHTLY_IGNORE_DEPS: "true"
+
+.windows_orangec6.73.1:
+    extends: .windows_orangec
+
+    variables:
+        CMAKE_CONFIGURATION: windows_orangec6.73.1
+
 .windows_arm64_vs2022:
     extends: .windows
 
@@ -245,7 +282,7 @@
         CMAKE_CONFIGURATION: windows_arm64_vs2022
         CMAKE_GENERATOR: "Visual Studio 17 2022"
         CMAKE_GENERATOR_PLATFORM: "ARM64"
-        CMAKE_GENERATOR_TOOLSET: "v143,version=14.35.32215"
+        CMAKE_GENERATOR_TOOLSET: "v143,version=14.36.32532"
         CMAKE_CI_NIGHTLY_IGNORE_DEPS: "true"
 
 .mingw_osdn_io:
@@ -279,7 +316,7 @@
         - windows-x86_64
         - shell
         - vs2022
-        - msvc-19.35
+        - msvc-19.36
         - nonconcurrent
 
 .windows_x86_64_tags_nonconcurrent_vs2022_arm64:
@@ -288,7 +325,7 @@
         - windows-x86_64
         - shell
         - vs2022
-        - msvc-19.35-arm64
+        - msvc-19.36-arm64
         - nonconcurrent
 
 .windows_x86_64_tags_concurrent_vs2022:
@@ -297,7 +334,7 @@
         - windows-x86_64
         - shell
         - vs2022
-        - msvc-19.35
+        - msvc-19.36
         - concurrent
 
 .windows_x86_64_tags_concurrent_vs2019:
@@ -322,7 +359,7 @@
         - windows-arm64
         - shell
         - vs2022
-        - msvc-19.35
+        - msvc-19.36
         - nonconcurrent
 
 .windows_arm64_tags_concurrent_vs2022:
@@ -331,7 +368,7 @@
         - windows-arm64
         - shell
         - vs2022
-        - msvc-19.35
+        - msvc-19.36
         - concurrent
 
 ## Windows-specific scripts
@@ -343,6 +380,7 @@
     - Set-Item -Force -Path "env:WIX" -Value "$pwdpath\.gitlab\wix"
     - (& "$pwsh" -File ".gitlab/ci/cmake.ps1")
     - Set-Item -Force -Path "env:PATH" -Value "$pwdpath\.gitlab\cmake\bin;$env:PATH"
+    - $cmake = "cmake"
     - . .gitlab/ci/ninja-env.ps1
     - (& "$env:WIX\bin\light.exe" -help) | Select -First 1
     - cmake --version

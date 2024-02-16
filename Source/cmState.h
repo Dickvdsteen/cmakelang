@@ -8,7 +8,6 @@
 #include <memory>
 #include <set>
 #include <string>
-#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -184,7 +183,8 @@ public:
   void AddFlowControlCommand(std::string const& name, Command command);
   void AddFlowControlCommand(std::string const& name, BuiltinCommand command);
   void AddDisallowedCommand(std::string const& name, BuiltinCommand command,
-                            cmPolicies::PolicyID policy, const char* message);
+                            cmPolicies::PolicyID policy, const char* message,
+                            const char* additionalWarning = nullptr);
   void AddUnexpectedCommand(std::string const& name, const char* error);
   void AddUnexpectedFlowControlCommand(std::string const& name,
                                        const char* error);
@@ -194,7 +194,7 @@ public:
   void RemoveUserDefinedCommands();
   std::vector<std::string> GetCommandNames() const;
 
-  void SetGlobalProperty(const std::string& prop, const char* value);
+  void SetGlobalProperty(const std::string& prop, const std::string& value);
   void SetGlobalProperty(const std::string& prop, cmValue value);
   void AppendGlobalProperty(const std::string& prop, const std::string& value,
                             bool asString = false);
@@ -220,6 +220,8 @@ public:
   bool UseNMake() const;
   void SetMSYSShell(bool mSYSShell);
   bool UseMSYSShell() const;
+  void SetNinja(bool ninja);
+  bool UseNinja() const;
   void SetNinjaMulti(bool ninjaMulti);
   bool UseNinjaMulti() const;
 
@@ -254,7 +256,7 @@ public:
 private:
   friend class cmake;
   void AddCacheEntry(const std::string& key, cmValue value,
-                     const char* helpString,
+                     const std::string& helpString,
                      cmStateEnums::CacheEntryType type);
 
   bool DoWriteGlobVerifyTarget() const;
@@ -297,6 +299,7 @@ private:
   bool MinGWMake = false;
   bool NMake = false;
   bool MSYSShell = false;
+  bool Ninja = false;
   bool NinjaMulti = false;
   Mode StateMode = Unknown;
   ProjectKind StateProjectKind = ProjectKind::Normal;

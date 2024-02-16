@@ -77,8 +77,14 @@ protected:
   // write the clean rules for this target
   void WriteTargetCleanRules();
 
+  // write the linker depend rules for this target
+  void WriteTargetLinkDependRules();
   // write the depend rules for this target
   void WriteTargetDependRules();
+
+  std::string GetClangTidyReplacementsFilePath(
+    std::string const& directory, cmSourceFile const& source,
+    std::string const& config) const override;
 
   // write rules for macOS Application Bundle content.
   struct MacOSXContentGeneratorType

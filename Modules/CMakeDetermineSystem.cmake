@@ -6,30 +6,6 @@
 # CMAKE_SYSTEM_NAME - on unix this is uname -s, for windows it is Windows
 # CMAKE_SYSTEM_VERSION - on unix this is uname -r, for windows it is empty
 # CMAKE_SYSTEM - ${CMAKE_SYSTEM}-${CMAKE_SYSTEM_VERSION}, for windows: ${CMAKE_SYSTEM}
-#
-#  Expected uname -s output:
-#
-# AIX                           AIX
-# BSD/OS                        BSD/OS
-# FreeBSD                       FreeBSD
-# HP-UX                         HP-UX
-# Linux                         Linux
-# GNU/kFreeBSD                  GNU/kFreeBSD
-# NetBSD                        NetBSD
-# OpenBSD                       OpenBSD
-# OFS/1 (Digital Unix)          OSF1
-# SCO OpenServer 5              SCO_SV
-# SCO UnixWare 7                UnixWare
-# SCO UnixWare (pre release 7)  UNIX_SV
-# SCO XENIX                     Xenix
-# Solaris                       SunOS
-# SunOS                         SunOS
-# Tru64                         Tru64
-# Ultrix                        ULTRIX
-# cygwin                        CYGWIN_NT-5.1
-# MSYS                          MSYS_NT-6.1
-# MacOSX                        Darwin
-
 
 # find out on which system cmake runs
 if(CMAKE_HOST_UNIX)
@@ -47,6 +23,28 @@ if(CMAKE_HOST_UNIX)
       set(CMAKE_HOST_SYSTEM_VERSION "${_CMAKE_HOST_SYSTEM_MAJOR_VERSION}.${_CMAKE_HOST_SYSTEM_MINOR_VERSION}")
       unset(_CMAKE_HOST_SYSTEM_MAJOR_VERSION)
       unset(_CMAKE_HOST_SYSTEM_MINOR_VERSION)
+    elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Android")
+      execute_process(COMMAND getprop ro.build.version.sdk
+        OUTPUT_VARIABLE CMAKE_HOST_SYSTEM_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+
+      if(NOT DEFINED CMAKE_SYSTEM_VERSION)
+        set(_ANDROID_API_LEVEL_H $ENV{PREFIX}/include/android/api-level.h)
+        set(_ANDROID_API_REGEX "#define __ANDROID_API__ ([0-9]+)")
+        file(READ ${_ANDROID_API_LEVEL_H} _ANDROID_API_LEVEL_H_CONTENT)
+        string(REGEX MATCH ${_ANDROID_API_REGEX} _ANDROID_API_LINE "${_ANDROID_API_LEVEL_H_CONTENT}")
+        string(REGEX REPLACE ${_ANDROID_API_REGEX} "\\1" _ANDROID_API "${_ANDROID_API_LINE}")
+        if(_ANDROID_API)
+          set(CMAKE_SYSTEM_VERSION "${_ANDROID_API}")
+        endif()
+
+        unset(_ANDROID_API_LEVEL_H)
+        unset(_ANDROID_API_LEVEL_H_CONTENT)
+        unset(_ANDROID_API_REGEX)
+        unset(_ANDROID_API_LINE)
+        unset(_ANDROID_API)
+      endif()
     else()
       execute_process(COMMAND ${CMAKE_UNAME} -r
         OUTPUT_VARIABLE CMAKE_HOST_SYSTEM_VERSION
@@ -155,22 +153,19 @@ if(CMAKE_TOOLCHAIN_FILE)
   endif()
 endif()
 
-
-# if CMAKE_SYSTEM_NAME is here already set, either it comes from a toolchain file
-# or it was set via -DCMAKE_SYSTEM_NAME=...
-# if that's the case, assume we are crosscompiling
 if(CMAKE_SYSTEM_NAME)
+  # CMAKE_SYSTEM_NAME was set by a toolchain file or on the command line.
+  # Assume it set CMAKE_SYSTEM_VERSION and CMAKE_SYSTEM_PROCESSOR too.
   if(NOT DEFINED CMAKE_CROSSCOMPILING)
     set(CMAKE_CROSSCOMPILING TRUE)
   endif()
-  set(PRESET_CMAKE_SYSTEM_NAME TRUE)
 elseif(CMAKE_VS_WINCE_VERSION)
   set(CMAKE_SYSTEM_NAME      "WindowsCE")
   set(CMAKE_SYSTEM_VERSION   "${CMAKE_VS_WINCE_VERSION}")
   set(CMAKE_SYSTEM_PROCESSOR "${MSVC_C_ARCHITECTURE_ID}")
   set(CMAKE_CROSSCOMPILING TRUE)
-  set(PRESET_CMAKE_SYSTEM_NAME TRUE)
 else()
+  # Build for the host platform and architecture by default.
   set(CMAKE_SYSTEM_NAME      "${CMAKE_HOST_SYSTEM_NAME}")
   if(NOT DEFINED CMAKE_SYSTEM_VERSION)
     set(CMAKE_SYSTEM_VERSION "${CMAKE_HOST_SYSTEM_VERSION}")
@@ -184,7 +179,6 @@ else()
       )
   endif()
   set(CMAKE_CROSSCOMPILING FALSE)
-  set(PRESET_CMAKE_SYSTEM_NAME FALSE)
 endif()
 
 include(Platform/${CMAKE_SYSTEM_NAME}-Determine OPTIONAL)
@@ -202,7 +196,7 @@ endif()
 # in this case there is no CMAKE_BINARY_DIR
 if(CMAKE_BINARY_DIR)
   # write entry to the log file
-  if(PRESET_CMAKE_SYSTEM_NAME)
+  if(CMAKE_CROSSCOMPILING)
     message(CONFIGURE_LOG
       "The target system is: ${CMAKE_SYSTEM_NAME} - ${CMAKE_SYSTEM_VERSION} - ${CMAKE_SYSTEM_PROCESSOR}\n"
       "The host system is: ${CMAKE_HOST_SYSTEM_NAME} - ${CMAKE_HOST_SYSTEM_VERSION} - ${CMAKE_HOST_SYSTEM_PROCESSOR}\n"

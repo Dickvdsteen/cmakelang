@@ -2,6 +2,7 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -28,6 +29,16 @@ enum class ExpandMacroResult
 
 using MacroExpander = std::function<ExpandMacroResult(
   const std::string&, const std::string&, std::string&, int version)>;
+
+ExpandMacroResult ExpandMacros(
+  std::string& out, const std::vector<MacroExpander>& macroExpanders,
+  int version);
+
+ExpandMacroResult ExpandMacro(std::string& out,
+                              const std::string& macroNamespace,
+                              const std::string& macroName,
+                              const std::vector<MacroExpander>& macroExpanders,
+                              int version);
 }
 
 class cmCMakePresetsGraph::Condition
@@ -169,4 +180,6 @@ bool PresetVectorOneOrMoreStringHelper(std::vector<std::string>& out,
 bool EnvironmentMapHelper(
   std::map<std::string, cm::optional<std::string>>& out,
   const Json::Value* value, cmJSONState* state);
+
+cmJSONHelper<std::nullptr_t> SchemaHelper();
 }

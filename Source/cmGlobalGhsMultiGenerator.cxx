@@ -18,6 +18,7 @@
 #include "cmGeneratedFileStream.h"
 #include "cmGeneratorTarget.h"
 #include "cmGhsMultiGpj.h"
+#include "cmList.h"
 #include "cmLocalGenerator.h"
 #include "cmLocalGhsMultiGenerator.h"
 #include "cmMakefile.h"
@@ -100,11 +101,11 @@ bool cmGlobalGhsMultiGenerator::SetGeneratorToolset(std::string const& ts,
 
   /* check if the toolset changed from last generate */
   if (cmNonempty(prevTool) && !cmSystemTools::ComparePath(gbuild, *prevTool)) {
-    std::string const& e =
-      cmStrCat("toolset build tool: ", gbuild,
-               "\nDoes not match the previously used build tool: ", *prevTool,
-               "\nEither remove the CMakeCache.txt file and CMakeFiles "
-               "directory or choose a different binary directory.");
+    std::string const& e = cmStrCat(
+      "toolset build tool: ", gbuild, '\n',
+      "Does not match the previously used build tool: ", *prevTool, '\n',
+      "Either remove the CMakeCache.txt file and CMakeFiles "
+      "directory or choose a different binary directory.");
     mf->IssueMessage(MessageType::FATAL_ERROR, e);
     return false;
   }
@@ -531,7 +532,7 @@ void cmGlobalGhsMultiGenerator::WriteMacros(std::ostream& fout,
   fout << "macro PROJ_NAME=" << root->GetProjectName() << '\n';
   cmValue ghsGpjMacros = root->GetMakefile()->GetDefinition("GHS_GPJ_MACROS");
   if (ghsGpjMacros) {
-    std::vector<std::string> expandedList = cmExpandedList(*ghsGpjMacros);
+    cmList expandedList{ *ghsGpjMacros };
     for (std::string const& arg : expandedList) {
       fout << "macro " << arg << '\n';
     }
@@ -669,7 +670,7 @@ bool cmGlobalGhsMultiGenerator::AddCheckTarget()
     }
 
     // Add the cache file.
-    listFiles.push_back(cmStrCat(
+    listFiles.emplace_back(cmStrCat(
       this->GetCMakeInstance()->GetHomeOutputDirectory(), "/CMakeCache.txt"));
 
     // Print not implemented warning.

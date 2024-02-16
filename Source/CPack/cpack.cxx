@@ -29,6 +29,7 @@
 #include "cmDocumentationEntry.h"
 #include "cmGlobalGenerator.h"
 #include "cmJSONState.h"
+#include "cmList.h"
 #include "cmMakefile.h"
 #include "cmState.h"
 #include "cmStateSnapshot.h"
@@ -362,11 +363,11 @@ int main(int argc, char const* const* argv)
     }
 
     if (!expandedPreset->Generators.empty() && generator.empty()) {
-      generator = cmJoin(expandedPreset->Generators, ";");
+      generator = cmList::to_string(expandedPreset->Generators);
     }
 
     if (!expandedPreset->Configurations.empty() && cpackBuildConfig.empty()) {
-      cpackBuildConfig = cmJoin(expandedPreset->Configurations, ";");
+      cpackBuildConfig = cmList::to_string(expandedPreset->Configurations);
     }
 
     definitions.insert(expandedPreset->Variables.begin(),
@@ -509,8 +510,8 @@ int main(int argc, char const* const* argv)
       cmCPack_Log(&log, cmCPackLog::LOG_ERROR,
                   "CPack generator not specified\n");
     } else {
-      std::vector<std::string> generatorsVector = cmExpandedList(*genList);
-      for (std::string const& gen : generatorsVector) {
+      cmList generatorsList{ *genList };
+      for (std::string const& gen : generatorsList) {
         cmMakefile::ScopePushPop raii(&globalMF);
         cmMakefile* mf = &globalMF;
         cmCPack_Log(&log, cmCPackLog::LOG_VERBOSE,

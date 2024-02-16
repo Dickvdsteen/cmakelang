@@ -8,6 +8,7 @@
 
 #include <cm/memory>
 
+#include "cmCryptoHash.h"
 #ifndef CMAKE_BOOTSTRAP
 #  include "cmExportInstallAndroidMKGenerator.h"
 #endif
@@ -16,6 +17,7 @@
 #include "cmInstallType.h"
 #include "cmListFileCache.h"
 #include "cmLocalGenerator.h"
+#include "cmScriptGenerator.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 
@@ -25,7 +27,7 @@ cmInstallExportGenerator::cmInstallExportGenerator(
   std::string const& component, MessageLevel message, bool exclude_from_all,
   std::string filename, std::string name_space,
   std::string cxx_modules_directory, bool exportOld, bool android,
-  cmListFileBacktrace backtrace)
+  bool exportPackageDependencies, cmListFileBacktrace backtrace)
   : cmInstallGenerator(destination, configurations, component, message,
                        exclude_from_all, false, std::move(backtrace))
   , ExportSet(exportSet)
@@ -34,6 +36,7 @@ cmInstallExportGenerator::cmInstallExportGenerator(
   , Namespace(std::move(name_space))
   , CxxModulesDirectory(std::move(cxx_modules_directory))
   , ExportOld(exportOld)
+  , ExportPackageDependencies(exportPackageDependencies)
 {
   if (android) {
 #ifndef CMAKE_BOOTSTRAP
@@ -63,11 +66,10 @@ std::string cmInstallExportGenerator::TempDirCalculate() const
     return path;
   }
 
-#ifndef CMAKE_BOOTSTRAP
+  cmCryptoHash hasher(cmCryptoHash::AlgoMD5);
   path += '/';
   // Replace the destination path with a hash to keep it short.
-  path += cmSystemTools::ComputeStringMD5(this->Destination);
-#endif
+  path += hasher.HashString(this->Destination);
 
   return path;
 }
@@ -118,6 +120,7 @@ void cmInstallExportGenerator::GenerateScript(std::ostream& os)
       this->EFGen->AddConfiguration(c);
     }
   }
+  this->EFGen->SetExportPackageDependencies(this->ExportPackageDependencies);
   this->EFGen->GenerateImportFile();
 
   // Perform the main install script generation.
@@ -157,10 +160,11 @@ void cmInstallExportGenerator::GenerateScriptConfigs(std::ostream& os,
     // Remove old per-configuration export files if the main changes.
     std::string installedDir = cmStrCat(
       "$ENV{DESTDIR}", ConvertToAbsoluteDestination(cxx_module_dest), '/');
-    std::string installedFile = cmStrCat(installedDir, "/cxx-modules.cmake");
+    std::string installedFile = cmStrCat(installedDir, "/cxx-modules-",
+                                         this->ExportSet->GetName(), ".cmake");
     std::string toInstallFile =
       cmStrCat(cmSystemTools::GetFilenamePath(config_file_example),
-               "/cxx-modules.cmake");
+               "/cxx-modules-", this->ExportSet->GetName(), ".cmake");
     os << indent << "if(EXISTS \"" << installedFile << "\")\n";
     Indent indentN = indent.Next();
     Indent indentNN = indentN.Next();

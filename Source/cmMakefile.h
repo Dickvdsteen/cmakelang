@@ -25,9 +25,10 @@
 
 #include "cmAlgorithms.h"
 #include "cmCustomCommand.h"
-#include "cmCustomCommandTypes.h"
+#include "cmFindPackageStack.h"
+#include "cmFunctionBlocker.h"
 #include "cmListFileCache.h"
-#include "cmMessageType.h"
+#include "cmMessageType.h" // IWYU pragma: keep
 #include "cmNewLineStyle.h"
 #include "cmPolicies.h"
 #include "cmSourceFileLocationKind.h"
@@ -43,12 +44,14 @@
 #  include "cmSourceGroup.h"
 #endif
 
+enum class cmCustomCommandType;
+enum class cmObjectLibraryCommands;
+
 class cmCompiledGeneratorExpression;
 class cmCustomCommandLines;
 class cmExecutionStatus;
 class cmExpandedCommandArgument;
 class cmExportBuildFileGenerator;
-class cmFunctionBlocker;
 class cmGeneratorExpressionEvaluationFile;
 class cmGlobalGenerator;
 class cmInstallGenerator;
@@ -302,14 +305,23 @@ public:
    */
   void AddDefinitionBool(const std::string& name, bool);
   //! Add a definition to this makefile and the global cmake cache.
-  void AddCacheDefinition(const std::string& name, const char* value,
-                          const char* doc, cmStateEnums::CacheEntryType type,
+  void AddCacheDefinition(const std::string& name, cmValue value, cmValue doc,
+                          cmStateEnums::CacheEntryType type,
                           bool force = false);
-  void AddCacheDefinition(const std::string& name, const std::string& value,
-                          const char* doc, cmStateEnums::CacheEntryType type,
+  void AddCacheDefinition(const std::string& name, cmValue value,
+                          const std::string& doc,
+                          cmStateEnums::CacheEntryType type,
                           bool force = false)
   {
-    this->AddCacheDefinition(name, value.c_str(), doc, type, force);
+    this->AddCacheDefinition(name, value, cmValue{ doc }, type, force);
+  }
+  void AddCacheDefinition(const std::string& name, const std::string& value,
+                          const std::string& doc,
+                          cmStateEnums::CacheEntryType type,
+                          bool force = false)
+  {
+    this->AddCacheDefinition(name, cmValue{ value }, cmValue{ doc }, type,
+                             force);
   }
 
   /**
@@ -425,7 +437,7 @@ public:
    */
   void SetIncludeRegularExpression(const std::string& regex)
   {
-    this->SetProperty("INCLUDE_REGULAR_EXPRESSION", regex.c_str());
+    this->SetProperty("INCLUDE_REGULAR_EXPRESSION", regex);
   }
   const std::string& GetIncludeRegularExpression() const
   {
@@ -518,8 +530,6 @@ public:
   const std::string& GetRequiredDefinition(const std::string& name) const;
   bool IsDefinitionSet(const std::string&) const;
   bool IsNormalDefinitionSet(const std::string&) const;
-  bool GetDefExpandList(const std::string& name, std::vector<std::string>& out,
-                        bool emptyArgs = false) const;
   /**
    * Get the list of all variables in the current space. If argument
    * cacheonly is specified and is greater than 0, then only cache
@@ -554,6 +564,8 @@ public:
     AppleTVSimulator,
     WatchOS,
     WatchSimulator,
+    XROS,
+    XRSimulator,
   };
 
   /** What SDK type points CMAKE_OSX_SYSROOT to? */
@@ -561,6 +573,9 @@ public:
 
   /** Return whether the target platform is Apple iOS.  */
   bool PlatformIsAppleEmbedded() const;
+
+  /** Return whether the target platform is an Apple simulator.  */
+  bool PlatformIsAppleSimulator() const;
 
   /** Return whether the target platform supports generation of text base stubs
      (.tbd file) describing exports (Apple specific). */
@@ -644,6 +659,11 @@ public:
    * Get the current context backtrace.
    */
   cmListFileBacktrace GetBacktrace() const;
+
+  /**
+   * Get the current stack of find_package calls.
+   */
+  cmFindPackageStack GetFindPackageStack() const;
 
   /**
    * Get the vector of  files created by this makefile
@@ -803,8 +823,11 @@ public:
                              std::string& debugBuffer) const;
 
   //! Set/Get a property of this directory
-  void SetProperty(const std::string& prop, const char* value);
   void SetProperty(const std::string& prop, cmValue value);
+  void SetProperty(const std::string& prop, std::nullptr_t)
+  {
+    this->SetProperty(prop, cmValue{ nullptr });
+  }
   void SetProperty(const std::string& prop, const std::string& value)
   {
     this->SetProperty(prop, cmValue(value));
@@ -1003,6 +1026,15 @@ public:
   // searches
   std::deque<std::vector<std::string>> FindPackageRootPathStack;
 
+  class FindPackageStackRAII
+  {
+    cmMakefile* Makefile;
+
+  public:
+    FindPackageStackRAII(cmMakefile* mf, std::string const& pkg);
+    ~FindPackageStackRAII();
+  };
+
   class DebugFindPkgRAII
   {
     cmMakefile* Makefile;
@@ -1192,6 +1224,9 @@ private:
 
   std::vector<BT<GeneratorAction>> GeneratorActions;
   bool GeneratorActionsInvoked = false;
+
+  cmFindPackageStack FindPackageStack;
+  unsigned int FindPackageStackNextIndex = 0;
 
   bool DebugFindPkg = false;
 

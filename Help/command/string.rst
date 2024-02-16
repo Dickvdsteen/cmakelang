@@ -22,7 +22,7 @@ Synopsis
     string(`JOIN`_ <glue> <out-var> [<input>...])
     string(`TOLOWER`_ <string> <out-var>)
     string(`TOUPPER`_ <string> <out-var>)
-    string(`LENGTH`_ <string> <out-var>)
+    string(`LENGTH <LENGTH_>`_ <string> <out-var>)
     string(`SUBSTRING`_ <string> <begin> <length> <out-var>)
     string(`STRIP`_ <string> <out-var>)
     string(`GENEX_STRIP`_ <string> <out-var>)
@@ -576,6 +576,9 @@ Functionality for querying a JSON string.
   Set an element in ``<json-string>`` at the location
   given by the list of ``<member|index>`` arguments to ``<value>``.
   The contents of ``<value>`` should be valid JSON.
+  If ``<json-string>`` is an array, ``<value>`` can be appended to the end of
+  the array by using a number greater or equal to the array length as the
+  ``<member|index>`` argument.
 
 .. signature::
   string(JSON <out-var> [ERROR_VARIABLE <error-var>]

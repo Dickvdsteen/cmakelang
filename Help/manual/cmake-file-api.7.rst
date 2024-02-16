@@ -23,6 +23,12 @@ of files within the API directory.  API file layout versioning is
 orthogonal to the versioning of `Object Kinds`_ used in replies.
 This version of CMake supports only one API version, `API v1`_.
 
+.. versionadded:: 3.27
+  Projects may also submit queries for the current run using the
+  :command:`cmake_file_api` command.
+
+.. _`file-api v1`:
+
 API v1
 ======
 
@@ -425,7 +431,7 @@ Version 1 does not exist to avoid confusion with that from
 
   {
     "kind": "codemodel",
-    "version": { "major": 2, "minor": 5 },
+    "version": { "major": 2, "minor": 7 },
     "paths": {
       "source": "/path/to/top-level-source-dir",
       "build": "/path/to/top-level-build-dir"
@@ -992,6 +998,36 @@ with members:
       destination is available.  The value is an unsigned integer 0-based
       index into the ``backtraceGraph`` member's ``nodes`` array.
 
+``launchers``
+  Optional member that is present on executable targets that have
+  at least one launcher specified by the project.  The value is a
+  JSON array of entries corresponding to the specified launchers.
+  Each entry is a JSON object with members:
+
+  ``command``
+    A string specifying the path to the launcher on disk, represented
+    with forward slashes. If the file is inside the top-level source
+    directory then the path is specified relative to that directory.
+
+  ``arguments``
+    Optional member that is present when the launcher command has
+    arguments preceding the executable to be launched.  The value
+    is a JSON array of strings representing the arguments.
+
+  ``type``
+    A string specifying the type of launcher.  The value is one of
+    the following:
+
+    ``emulator``
+      An emulator for the target platform when cross-compiling.
+      See the :prop_tgt:`CROSSCOMPILING_EMULATOR` target property.
+
+    ``test``
+      A start program for the execution of tests.
+      See the :prop_tgt:`TEST_LAUNCHER` target property.
+
+  This field was added in codemodel version 2.7.
+
 ``link``
   Optional member that is present for executables and shared library
   targets that link into a runtime binary.  The value is a JSON object
@@ -1087,8 +1123,10 @@ with members:
     ``PRIVATE``, or ``INTERFACE``.
 
   ``baseDirectories``
-    A JSON array of strings specifying the base directories containing sources
-    in the file set.
+    A JSON array of strings, each specifying a base directory containing
+    sources in the file set.  If the directory is inside the top-level source
+    directory then the path is specified relative to that directory.
+    Otherwise the path is absolute.
 
   This field was added in codemodel version 2.5.
 
@@ -1210,6 +1248,28 @@ with members:
       that added this include directory is available.  The value is
       an unsigned integer 0-based index into the ``backtraceGraph``
       member's ``nodes`` array.
+
+  ``frameworks``
+    Optional member that is present when, on Apple platforms, there are
+    frameworks. The value is a JSON array with an entry for each directory.
+    Each entry is a JSON object with members:
+
+    ``path``
+      A string specifying the path to the framework directory,
+      represented with forward slashes.
+
+    ``isSystem``
+      Optional member that is present with boolean value ``true`` if
+      the framework is marked as a system one.
+
+    ``backtrace``
+      Optional member that is present when a CMake language backtrace to
+      the :command:`target_link_libraries` or other command invocation
+      that added this framework is available.  The value is
+      an unsigned integer 0-based index into the ``backtraceGraph``
+      member's ``nodes`` array.
+
+    This field was added in codemodel version 2.6.
 
   ``precompileHeaders``
     Optional member that is present when :command:`target_precompile_headers`

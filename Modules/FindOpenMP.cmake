@@ -224,7 +224,8 @@ function(_OPENMP_GET_FLAGS LANG FLAG_MODE OPENMP_FLAG_VAR OPENMP_LIB_NAMES_VAR)
       OUTPUT_VARIABLE OpenMP_TRY_COMPILE_OUTPUT
     )
 
-    if(OpenMP_COMPILE_RESULT_${FLAG_MODE}_${OPENMP_PLAIN_FLAG})
+    if(OpenMP_COMPILE_RESULT_${FLAG_MODE}_${OPENMP_PLAIN_FLAG} AND
+       NOT "x${CMAKE_${LANG}_SIMULATE_ID}" STREQUAL "xMSVC")
       set("${OPENMP_FLAG_VAR}" "${OPENMP_FLAG}" PARENT_SCOPE)
 
       if(CMAKE_${LANG}_VERBOSE_FLAG)
@@ -298,8 +299,9 @@ function(_OPENMP_GET_FLAGS LANG FLAG_MODE OPENMP_FLAG_VAR OPENMP_LIB_NAMES_VAR)
         set("${OPENMP_LIB_NAMES_VAR}" "" PARENT_SCOPE)
       endif()
       break()
-    elseif(CMAKE_${LANG}_COMPILER_ID STREQUAL "AppleClang"
-      AND CMAKE_${LANG}_COMPILER_VERSION VERSION_GREATER_EQUAL "7.0")
+    elseif((CMAKE_${LANG}_COMPILER_ID STREQUAL "AppleClang"
+      AND CMAKE_${LANG}_COMPILER_VERSION VERSION_GREATER_EQUAL "7.0") OR
+      (CMAKE_${LANG}_COMPILER_ID STREQUAL "Clang" AND APPLE))
 
       # Check for separate OpenMP library on AppleClang 7+
       find_library(OpenMP_libomp_LIBRARY
@@ -434,6 +436,8 @@ endfunction()
 
 macro(_OPENMP_SET_VERSION_BY_SPEC_DATE LANG)
   set(OpenMP_SPEC_DATE_MAP
+    "202111=5.2"
+    "202011=5.1"
     # Preview versions
     "201611=5.0" # OpenMP 5.0 preview 1
     # Combined versions, 2.5 onwards
@@ -600,15 +604,13 @@ foreach(LANG IN LISTS OpenMP_FINDLIST)
         add_library(OpenMP::OpenMP_${LANG} INTERFACE IMPORTED)
       endif()
       if(OpenMP_${LANG}_FLAGS)
-        separate_arguments(_OpenMP_${LANG}_OPTIONS NATIVE_COMMAND "${OpenMP_${LANG}_FLAGS}")
         set_property(TARGET OpenMP::OpenMP_${LANG} PROPERTY
-          INTERFACE_COMPILE_OPTIONS "$<$<COMPILE_LANGUAGE:${LANG}>:${_OpenMP_${LANG}_OPTIONS}>")
+          INTERFACE_COMPILE_OPTIONS "$<$<COMPILE_LANGUAGE:${LANG}>:SHELL:${OpenMP_${LANG}_FLAGS}>")
         if(CMAKE_${LANG}_COMPILER_ID STREQUAL "Fujitsu"
           OR ${CMAKE_${LANG}_COMPILER_ID} STREQUAL "IntelLLVM")
           set_property(TARGET OpenMP::OpenMP_${LANG} PROPERTY
-            INTERFACE_LINK_OPTIONS "${OpenMP_${LANG}_FLAGS}")
+            INTERFACE_LINK_OPTIONS "SHELL:${OpenMP_${LANG}_FLAGS}")
         endif()
-        unset(_OpenMP_${LANG}_OPTIONS)
       endif()
       if(OpenMP_${LANG}_INCLUDE_DIRS)
         set_property(TARGET OpenMP::OpenMP_${LANG} PROPERTY

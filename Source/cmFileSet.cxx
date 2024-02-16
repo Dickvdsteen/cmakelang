@@ -7,11 +7,13 @@
 #include <utility>
 #include <vector>
 
+#include <cmext/algorithm>
 #include <cmext/string_view>
 
 #include "cmsys/RegularExpression.hxx"
 
 #include "cmGeneratorExpression.h"
+#include "cmList.h"
 #include "cmListFileCache.h"
 #include "cmLocalGenerator.h"
 #include "cmMakefile.h"
@@ -78,6 +80,11 @@ bool cmFileSetVisibilityIsForInterface(cmFileSetVisibility vis)
   return false;
 }
 
+bool cmFileSetTypeCanBeIncluded(std::string const& type)
+{
+  return type == "HEADERS"_s;
+}
+
 cmFileSet::cmFileSet(cmake& cmakeInstance, std::string name, std::string type,
                      cmFileSetVisibility visibility)
   : CMakeInstance(cmakeInstance)
@@ -85,6 +92,12 @@ cmFileSet::cmFileSet(cmake& cmakeInstance, std::string name, std::string type,
   , Type(std::move(type))
   , Visibility(visibility)
 {
+}
+
+void cmFileSet::CopyEntries(cmFileSet const* fs)
+{
+  cm::append(this->DirectoryEntries, fs->DirectoryEntries);
+  cm::append(this->FileEntries, fs->FileEntries);
 }
 
 void cmFileSet::ClearDirectoryEntries()
@@ -113,7 +126,7 @@ cmFileSet::CompileFileEntries() const
   std::vector<std::unique_ptr<cmCompiledGeneratorExpression>> result;
 
   for (auto const& entry : this->FileEntries) {
-    for (auto const& ex : cmExpandedList(entry.Value)) {
+    for (auto const& ex : cmList{ entry.Value }) {
       cmGeneratorExpression ge(this->CMakeInstance, entry.Backtrace);
       auto cge = ge.Parse(ex);
       result.push_back(std::move(cge));
@@ -129,7 +142,7 @@ cmFileSet::CompileDirectoryEntries() const
   std::vector<std::unique_ptr<cmCompiledGeneratorExpression>> result;
 
   for (auto const& entry : this->DirectoryEntries) {
-    for (auto const& ex : cmExpandedList(entry.Value)) {
+    for (auto const& ex : cmList{ entry.Value }) {
       cmGeneratorExpression ge(this->CMakeInstance, entry.Backtrace);
       auto cge = ge.Parse(ex);
       result.push_back(std::move(cge));
@@ -148,7 +161,7 @@ std::vector<std::string> cmFileSet::EvaluateDirectoryEntries(
   std::vector<std::string> result;
   for (auto const& cge : cges) {
     auto entry = cge->Evaluate(lg, config, target, dagChecker);
-    auto dirs = cmExpandedList(entry);
+    cmList dirs{ entry };
     for (std::string dir : dirs) {
       if (!cmSystemTools::FileIsFullPath(dir)) {
         dir = cmStrCat(lg->GetCurrentSourceDirectory(), '/', dir);
@@ -184,7 +197,7 @@ void cmFileSet::EvaluateFileEntry(
   cmGeneratorExpressionDAGChecker* dagChecker) const
 {
   auto files = cge->Evaluate(lg, config, target, dagChecker);
-  for (std::string file : cmExpandedList(files)) {
+  for (std::string file : cmList{ files }) {
     if (!cmSystemTools::FileIsFullPath(file)) {
       file = cmStrCat(lg->GetCurrentSourceDirectory(), '/', file);
     }

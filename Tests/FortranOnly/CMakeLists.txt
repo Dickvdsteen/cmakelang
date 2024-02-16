@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.5...3.25) # Enable CMP0091 and CMP0141.
 project(FortranOnly Fortran)
 message("CTEST_FULL_OUTPUT ")
 
@@ -169,8 +169,11 @@ endif()
 # extensions like '.F' and '.fpp'.
 if(CMAKE_Fortran_COMPILE_OPTIONS_PREPROCESS_OFF AND
     NOT CMAKE_Fortran_COMPILER_ID MATCHES "(Flang|NAG|PGI|NVHPC|SunPro|XL)")
+
+  set(CMAKE_Fortran_PREPROCESS OFF)
   add_library(no_preprocess_target STATIC no_preprocess_target_upper.F)
   target_compile_options(no_preprocess_target PRIVATE -DINTEGER=nonsense)
+  unset(CMAKE_Fortran_PREPROCESS)
 
   add_library(no_preprocess_source STATIC no_preprocess_source_upper.F)
   target_compile_options(no_preprocess_source PRIVATE -DINTEGER=nonsense)
@@ -181,6 +184,5 @@ if(CMAKE_Fortran_COMPILE_OPTIONS_PREPROCESS_OFF AND
     target_sources(no_preprocess_source PRIVATE no_preprocess_source_fpp.fpp)
   endif()
 
-  set_property(TARGET no_preprocess_target PROPERTY Fortran_PREPROCESS OFF)
   set_property(SOURCE no_preprocess_source_upper.F no_preprocess_source_fpp.fpp PROPERTY Fortran_PREPROCESS OFF)
 endif()

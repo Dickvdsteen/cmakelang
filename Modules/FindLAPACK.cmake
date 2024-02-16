@@ -487,7 +487,11 @@ if(NOT LAPACK_NOT_FOUND_MESSAGE)
     set(_lapack_openblas_lib "openblas")
 
     if(_lapack_sizeof_integer EQUAL 8)
-      string(APPEND _lapack_openblas_lib "64")
+      if(MINGW)
+        string(APPEND _lapack_openblas_lib "_64")
+      else()
+        string(APPEND _lapack_openblas_lib "64")
+      endif()
     endif()
 
     check_lapack_libraries(
@@ -559,6 +563,29 @@ if(NOT LAPACK_NOT_FOUND_MESSAGE)
         "${BLAS_LIBRARIES}"
       )
     endif()
+  endif()
+
+  # AOCL? (https://developer.amd.com/amd-aocl/)
+  if(NOT LAPACK_LIBRARIES
+      AND (BLA_VENDOR MATCHES "AOCL" OR BLA_VENDOR STREQUAL "All"))
+    if(_lapack_sizeof_integer EQUAL 8)
+      set(_lapack_aocl_subdir "ILP64")
+    else()
+      set(_lapack_aocl_subdir "LP64")
+    endif()
+
+    check_lapack_libraries(
+      LAPACK_LIBRARIES
+      LAPACK
+      cheev
+      ""
+      "flame"
+      "-fopenmp"
+      ""
+      "${_lapack_aocl_subdir}"
+      "${BLAS_LIBRARIES}"
+    )
+    unset(_lapack_aocl_subdir)
   endif()
 
   # LAPACK in SCSL library? (SGI/Cray Scientific Library)

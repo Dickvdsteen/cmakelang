@@ -26,6 +26,7 @@
 #include "cmConsoleBuf.h"
 #include "cmDocumentationEntry.h"
 #include "cmGlobalGenerator.h"
+#include "cmList.h"
 #include "cmMakefile.h"
 #include "cmMessageMetadata.h"
 #include "cmState.h"
@@ -388,11 +389,20 @@ int do_cmake(int ac, char const* const* av)
     }
   }
 
-  // Always return a non-negative value.  Windows tools do not always
-  // interpret negative return values as errors.
+  // Always return a non-negative value (except exit code from SCRIPT_MODE).
+  // Windows tools do not always interpret negative return values as errors.
   if (res != 0) {
-    return 1;
+    auto scriptModeExitCode =
+      cm.HasScriptModeExitCode() ? cm.GetScriptModeExitCode() : 0;
+    res = scriptModeExitCode ? scriptModeExitCode : 1;
+#ifdef CMake_ENABLE_DEBUGGER
+    cm.StopDebuggerIfNeeded(res);
+#endif
+    return res;
   }
+#ifdef CMake_ENABLE_DEBUGGER
+  cm.StopDebuggerIfNeeded(0);
+#endif
   return 0;
 }
 
@@ -457,7 +467,7 @@ int do_build(int ac, char const* const* av)
   };
   auto targetLambda = [&](std::string const& value) -> bool {
     if (!value.empty()) {
-      std::vector<std::string> values = cmExpandedList(value);
+      cmList values{ value };
       for (auto const& v : values) {
         targets.emplace_back(v);
         if (v == "clean") {

@@ -29,8 +29,10 @@
 #include "cmGlobalGenerator.h"
 #include "cmGlobalVisualStudio7Generator.h"
 #include "cmGlobalVisualStudioGenerator.h"
+#include "cmList.h"
 #include "cmListFileCache.h"
 #include "cmMakefile.h"
+#include "cmMessageType.h"
 #include "cmOutputConverter.h"
 #include "cmPolicies.h"
 #include "cmSourceFile.h"
@@ -197,7 +199,7 @@ void cmLocalVisualStudio7Generator::GenerateTarget(cmGeneratorTarget* target)
   // Intel Fortran always uses VS9 format ".vfproj" files.
   cmGlobalVisualStudioGenerator::VSVersion realVersion = gg->GetVersion();
   if (this->FortranProject &&
-      gg->GetVersion() >= cmGlobalVisualStudioGenerator::VSVersion::VS11) {
+      gg->GetVersion() >= cmGlobalVisualStudioGenerator::VSVersion::VS12) {
     gg->SetVersion(cmGlobalVisualStudioGenerator::VSVersion::VS9);
   }
 
@@ -261,6 +263,10 @@ cmSourceFile* cmLocalVisualStudio7Generator::CreateVCProjBuildRule()
   cmCustomCommandLines commandLines =
     cmMakeSingleCommandLine({ cmSystemTools::GetCMakeCommand(), argS, argB,
                               "--check-stamp-file", stampName });
+
+  if (cm->GetIgnoreWarningAsError()) {
+    commandLines[0].emplace_back("--compile-no-warning-as-error");
+  }
   std::string comment = cmStrCat("Building Custom Rule ", makefileIn);
   auto cc = cm::make_unique<cmCustomCommand>();
   cc->SetOutputs(stampName);
@@ -278,7 +284,7 @@ cmSourceFile* cmLocalVisualStudio7Generator::CreateVCProjBuildRule()
     file->ResolveFullPath();
     return file;
   }
-  cmSystemTools::Error("Error adding rule for " + makefileIn);
+  cmSystemTools::Error(cmStrCat("Error adding rule for ", makefileIn));
   return nullptr;
 }
 
@@ -668,8 +674,8 @@ void cmLocalVisualStudio7Generator::WriteConfiguration(
                             : target->GetLinkerLanguage(configName));
     if (linkLanguage.empty()) {
       cmSystemTools::Error(
-        "CMake can not determine linker language for target: " +
-        target->GetName());
+        cmStrCat("CMake can not determine linker language for target: ",
+                 target->GetName()));
       return;
     }
     langForClCompile = linkLanguage;
@@ -789,6 +795,9 @@ void cmLocalVisualStudio7Generator::WriteConfiguration(
       target->GetType() == cmStateEnums::OBJECT_LIBRARY
       ? ".lib"
       : cmSystemTools::GetFilenameLastExtension(targetNameFull);
+    if (cm::optional<std::string> fortran = gg->GetPlatformToolsetFortran()) {
+      fout << "\t\t\tUseCompiler=\"" << *fortran << "Compiler\"\n";
+    }
     /* clang-format off */
     fout <<
       "\t\t\tTargetName=\"" << this->EscapeForXML(targetName) << "\"\n"
@@ -956,7 +965,7 @@ std::string cmLocalVisualStudio7Generator::GetBuildTypeLinkerFlags(
 {
   std::string configTypeUpper = cmSystemTools::UpperCase(configName);
   std::string extraLinkOptionsBuildTypeDef =
-    rootLinkerFlags + "_" + configTypeUpper;
+    cmStrCat(rootLinkerFlags, '_', configTypeUpper);
 
   const std::string& extraLinkOptionsBuildType =
     this->Makefile->GetRequiredDefinition(extraLinkOptionsBuildTypeDef);
@@ -973,31 +982,31 @@ void cmLocalVisualStudio7Generator::OutputBuildTool(
   std::string temp;
   std::string extraLinkOptions;
   if (target->GetType() == cmStateEnums::EXECUTABLE) {
-    extraLinkOptions =
-      this->Makefile->GetRequiredDefinition("CMAKE_EXE_LINKER_FLAGS") + " " +
-      GetBuildTypeLinkerFlags("CMAKE_EXE_LINKER_FLAGS", configName);
+    extraLinkOptions = cmStrCat(
+      this->Makefile->GetRequiredDefinition("CMAKE_EXE_LINKER_FLAGS"), ' ',
+      GetBuildTypeLinkerFlags("CMAKE_EXE_LINKER_FLAGS", configName));
   }
   if (target->GetType() == cmStateEnums::SHARED_LIBRARY) {
-    extraLinkOptions =
-      this->Makefile->GetRequiredDefinition("CMAKE_SHARED_LINKER_FLAGS") +
-      " " + GetBuildTypeLinkerFlags("CMAKE_SHARED_LINKER_FLAGS", configName);
+    extraLinkOptions = cmStrCat(
+      this->Makefile->GetRequiredDefinition("CMAKE_SHARED_LINKER_FLAGS"), ' ',
+      GetBuildTypeLinkerFlags("CMAKE_SHARED_LINKER_FLAGS", configName));
   }
   if (target->GetType() == cmStateEnums::MODULE_LIBRARY) {
-    extraLinkOptions =
-      this->Makefile->GetRequiredDefinition("CMAKE_MODULE_LINKER_FLAGS") +
-      " " + GetBuildTypeLinkerFlags("CMAKE_MODULE_LINKER_FLAGS", configName);
+    extraLinkOptions = cmStrCat(
+      this->Makefile->GetRequiredDefinition("CMAKE_MODULE_LINKER_FLAGS"), ' ',
+      GetBuildTypeLinkerFlags("CMAKE_MODULE_LINKER_FLAGS", configName));
   }
 
   cmValue targetLinkFlags = target->GetProperty("LINK_FLAGS");
   if (targetLinkFlags) {
-    extraLinkOptions += " ";
+    extraLinkOptions += ' ';
     extraLinkOptions += *targetLinkFlags;
   }
   std::string configTypeUpper = cmSystemTools::UpperCase(configName);
   std::string linkFlagsConfig = cmStrCat("LINK_FLAGS_", configTypeUpper);
   targetLinkFlags = target->GetProperty(linkFlagsConfig);
   if (targetLinkFlags) {
-    extraLinkOptions += " ";
+    extraLinkOptions += ' ';
     extraLinkOptions += *targetLinkFlags;
   }
 
@@ -1080,6 +1089,16 @@ void cmLocalVisualStudio7Generator::OutputBuildTool(
       cmComputeLinkInformation& cli = *pcli;
       std::string linkLanguage = cli.GetLinkLanguage();
 
+      if (!target->GetLinkerTypeProperty(linkLanguage, configName).empty()) {
+        // Visual Studio 10 or upper is required for this feature
+        this->GetCMakeInstance()->IssueMessage(
+          MessageType::FATAL_ERROR,
+          cmStrCat("'LINKER_TYPE' property, specified on target '",
+                   target->GetName(),
+                   "', is not supported by this generator."),
+          target->GetBacktrace());
+      }
+
       // Compute the variable name to lookup standard libraries for this
       // language.
       std::string standardLibsVar =
@@ -1155,6 +1174,16 @@ void cmLocalVisualStudio7Generator::OutputBuildTool(
       }
       cmComputeLinkInformation& cli = *pcli;
       std::string linkLanguage = cli.GetLinkLanguage();
+
+      if (!target->GetLinkerTypeProperty(linkLanguage, configName).empty()) {
+        // Visual Studio 10 or upper is required for this feature
+        this->GetCMakeInstance()->IssueMessage(
+          MessageType::FATAL_ERROR,
+          cmStrCat("'LINKER_TYPE' property, specified on target '",
+                   target->GetName(),
+                   "', is not supported by this generator."),
+          target->GetBacktrace());
+      }
 
       bool isWin32Executable = target->IsWin32Executable(configName);
 
@@ -1280,7 +1309,8 @@ void cmLocalVisualStudio7Generator::OutputDeploymentDebuggerTool(
          << "\"/>\n";
 
     if (dir) {
-      std::string const exe = *dir + "\\" + target->GetFullName(config);
+      std::string const exe =
+        cmStrCat(*dir, '\\', target->GetFullName(config));
 
       fout << "\t\t\t<DebuggerTool\n"
               "\t\t\t\tRemoteExecutable=\""
@@ -1312,7 +1342,8 @@ void cmLocalVisualStudio7GeneratorInternals::OutputLibraries(
       fout << (lib.HasFeature() ? lib.GetFormattedItem(rel).Value : rel)
            << " ";
     } else if (!lib.Target ||
-               lib.Target->GetType() != cmStateEnums::INTERFACE_LIBRARY) {
+               (lib.Target->GetType() != cmStateEnums::INTERFACE_LIBRARY &&
+                lib.Target->GetType() != cmStateEnums::OBJECT_LIBRARY)) {
       fout << lib.Value.Value << " ";
     }
   }
@@ -1364,8 +1395,9 @@ void cmLocalVisualStudio7Generator::OutputLibraryDirectories(
     // First search a configuration-specific subdirectory and then the
     // original directory.
     fout << comma
-         << this->ConvertToXMLOutputPath(dir + "/$(ConfigurationName)") << ","
-         << this->ConvertToXMLOutputPath(dir);
+         << this->ConvertToXMLOutputPath(
+              cmStrCat(dir, "/$(ConfigurationName)"))
+         << ',' << this->ConvertToXMLOutputPath(dir);
     comma = ",";
   }
 }
@@ -1545,11 +1577,11 @@ cmLocalVisualStudio7GeneratorFCInfo::cmLocalVisualStudio7GeneratorFCInfo(
       switch (cmOutputConverter::GetFortranFormat(
         sf.GetSafeProperty("Fortran_FORMAT"))) {
         case cmOutputConverter::FortranFormatFixed:
-          fc.CompileFlags = "-fixed " + fc.CompileFlags;
+          fc.CompileFlags = cmStrCat("-fixed ", fc.CompileFlags);
           needfc = true;
           break;
         case cmOutputConverter::FortranFormatFree:
-          fc.CompileFlags = "-free " + fc.CompileFlags;
+          fc.CompileFlags = cmStrCat("-free ", fc.CompileFlags);
           needfc = true;
           break;
         default:
@@ -1576,12 +1608,12 @@ cmLocalVisualStudio7GeneratorFCInfo::cmLocalVisualStudio7GeneratorFCInfo(
 
     // Check for extra object-file dependencies.
     if (cmValue deps = sf.GetProperty("OBJECT_DEPENDS")) {
-      std::vector<std::string> depends = cmExpandedList(*deps);
-      const char* sep = "";
-      for (const std::string& d : depends) {
-        fc.AdditionalDeps += sep;
-        fc.AdditionalDeps += lg->ConvertToXMLOutputPath(d);
-        sep = ";";
+      cmList depends{ *deps };
+      if (!depends.empty()) {
+        for (std::string& d : depends) {
+          d = lg->ConvertToXMLOutputPath(d);
+        }
+        fc.AdditionalDeps += depends.to_string();
         needfc = true;
       }
     }

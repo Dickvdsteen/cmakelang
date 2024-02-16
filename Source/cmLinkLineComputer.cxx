@@ -65,7 +65,8 @@ void cmLinkLineComputer::ComputeLinkLibs(
   ItemVector const& items = cli.GetItems();
   for (auto const& item : items) {
     if (item.Target &&
-        item.Target->GetType() == cmStateEnums::INTERFACE_LIBRARY) {
+        (item.Target->GetType() == cmStateEnums::INTERFACE_LIBRARY ||
+         item.Target->GetType() == cmStateEnums::OBJECT_LIBRARY)) {
       continue;
     }
 
@@ -191,16 +192,16 @@ std::string cmLinkLineComputer::ComputeRPath(cmComputeLinkInformation& cli)
 }
 
 std::string cmLinkLineComputer::ComputeFrameworkPath(
-  cmComputeLinkInformation& cli, std::string const& fwSearchFlag)
+  cmComputeLinkInformation& cli, cmValue fwSearchFlag)
 {
+  if (!fwSearchFlag) {
+    return std::string{};
+  }
+
   std::string frameworkPath;
-  if (!fwSearchFlag.empty()) {
-    std::vector<std::string> const& fwDirs = cli.GetFrameworkPaths();
-    for (std::string const& fd : fwDirs) {
-      frameworkPath += fwSearchFlag;
-      frameworkPath += this->ConvertToOutputFormat(fd);
-      frameworkPath += " ";
-    }
+  for (auto const& fd : cli.GetFrameworkPaths()) {
+    frameworkPath +=
+      cmStrCat(fwSearchFlag, this->ConvertToOutputFormat(fd), ' ');
   }
   return frameworkPath;
 }

@@ -1,3 +1,6 @@
+# Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
+# file Copyright.txt or https://cmake.org/licensing for details.
+
 foreach(
   arg
   IN ITEMS
@@ -24,6 +27,8 @@ function(run_cmake test)
   if(EXISTS ${top_src}/${test}-result.txt)
     file(READ ${top_src}/${test}-result.txt expect_result)
     string(REGEX REPLACE "\n+$" "" expect_result "${expect_result}")
+  elseif(DEFINED RunCMake_TEST_EXPECT_RESULT)
+    set(expect_result "${RunCMake_TEST_EXPECT_RESULT}")
   else()
     set(expect_result 0)
   endif()
@@ -47,8 +52,15 @@ function(run_cmake test)
     elseif(EXISTS ${top_src}/${test}-${o}.txt)
       file(READ ${top_src}/${test}-${o}.txt expect_${o})
       string(REGEX REPLACE "\n+$" "" expect_${o} "${expect_${o}}")
+    elseif(DEFINED RunCMake_TEST_EXPECT_${o})
+      string(REGEX REPLACE "\n+$" "" expect_${o} "${RunCMake_TEST_EXPECT_${o}}")
     else()
       unset(expect_${o})
+    endif()
+  endforeach()
+  foreach(o IN ITEMS stdout stderr config)
+    if(DEFINED RunCMake_TEST_NOT_EXPECT_${o})
+      string(REGEX REPLACE "\n+$" "" not_expect_${o} "${RunCMake_TEST_NOT_EXPECT_${o}}")
     endif()
   endforeach()
   if (NOT expect_stderr)
@@ -143,7 +155,19 @@ function(run_cmake test)
     ${maybe_timeout}
     ${maybe_input_file}
     )]])
+  if(DEFINED ENV{PWD})
+    set(old_pwd "$ENV{PWD}")
+  else()
+    set(old_pwd)
+  endif()
+  # Emulate a shell using this directory.
+  set(ENV{PWD} "${RunCMake_TEST_COMMAND_WORKING_DIRECTORY}")
   cmake_language(EVAL CODE "${_code}")
+  if(DEFINED old_pwd)
+    set(ENV{PWD} "${old_pwd}")
+  else()
+    set(ENV{PWD})
+  endif()
   set(msg "")
   if(NOT "${actual_result}" MATCHES "${expect_result}")
     string(APPEND msg "Result is [${actual_result}], not [${expect_result}].\n")
@@ -165,7 +189,9 @@ function(run_cmake test)
     "|BullseyeCoverage"
     "|[a-z]+\\([0-9]+\\) malloc:"
     "|clang[^:]*: warning: the object size sanitizer has no effect at -O0, but is explicitly enabled:"
+    "|flang-new: warning: argument unused during compilation: .-flang-experimental-exec."
     "|icp?x: remark: Note that use of .-g. without any optimization-level option will turn off most compiler optimizations"
+    "|ifx: remark #10440: Note that use of a debug option without any optimization-level option will turnoff most compiler optimizations"
     "|lld-link: warning: procedure symbol record for .* refers to PDB item index [0-9A-Fa-fx]+ which is not a valid function ID record"
     "|Error kstat returned"
     "|Hit xcodebuild bug"
@@ -175,9 +201,11 @@ function(run_cmake test)
     "|Your license to use PGI[^\n]*expired"
     "|Please obtain a new version at"
     "|contact PGI Sales at"
-    "|icp?c: remark #10441: The Intel\\(R\\) C\\+\\+ Compiler Classic \\(ICC\\) is deprecated"
+    "|ic(p?c|l): remark #10441: The Intel\\(R\\) C\\+\\+ Compiler Classic \\(ICC\\) is deprecated"
 
     "|[^\n]*install_name_tool: warning: changes being made to the file will invalidate the code signature in:"
+    "|[^\n]*(createItemModels|_NSMainThread|Please file a bug at)"
+    "|[^\n]*xcodebuild[^\n]*DVTAssertions: Warning"
     "|[^\n]*xcodebuild[^\n]*DVTCoreDeviceEnabledState: DVTCoreDeviceEnabledState_Disabled set via user default"
     "|[^\n]*xcodebuild[^\n]*DVTPlugInManager"
     "|[^\n]*xcodebuild[^\n]*DVTSDK: Warning: SDK path collision for path"
@@ -189,6 +217,7 @@ function(run_cmake test)
     "|[^\n]*offset in archive not a multiple of 8"
     "|[^\n]*from Time Machine by path"
     "|[^\n]*Bullseye Testing Technology"
+    ${RunCMake_TEST_EXTRA_IGNORE_LINE_REGEX}
     ")[^\n]*\n)+"
     )
   if(RunCMake_IGNORE_POLICY_VERSION_DEPRECATION)
@@ -210,6 +239,11 @@ function(run_cmake test)
     if(DEFINED expect_${o})
       if(NOT "${actual_${o}}" MATCHES "${expect_${o}}")
         string(APPEND msg "${o} does not match that expected.\n")
+      endif()
+    endif()
+    if(DEFINED not_expect_${o})
+      if("${actual_${o}}" MATCHES "${not_expect_${o}}")
+        string(APPEND msg "${o} matches that not expected.\n")
       endif()
     endif()
   endforeach()
@@ -290,6 +324,22 @@ function(ensure_files_match expected_file actual_file)
       actual content:\n
       ${actual_file_content}\n
     ")
+  endif()
+endfunction()
+
+# Get the user id on unix if possible.
+function(get_unix_uid var)
+  set("${var}" "" PARENT_SCOPE)
+  if(UNIX)
+    set(ID "id")
+    if(CMAKE_SYSTEM_NAME STREQUAL "SunOS" AND EXISTS "/usr/xpg4/bin/id")
+      set (ID "/usr/xpg4/bin/id")
+    endif()
+    execute_process(COMMAND ${ID} -u $ENV{USER} OUTPUT_VARIABLE uid ERROR_QUIET
+                    RESULT_VARIABLE status OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(status EQUAL 0)
+      set("${var}" "${uid}" PARENT_SCOPE)
+    endif()
   endif()
 endfunction()
 

@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "cmInstallGenerator.h"
-#include "cmScriptGenerator.h"
 
 class cmExportInstallFileGenerator;
 class cmExportSet;
@@ -30,7 +29,8 @@ public:
                            bool exclude_from_all, std::string filename,
                            std::string name_space,
                            std::string cxx_modules_directory, bool exportOld,
-                           bool android, cmListFileBacktrace backtrace);
+                           bool android, bool exportPackageDependencies,
+                           cmListFileBacktrace backtrace);
   cmInstallExportGenerator(const cmInstallExportGenerator&) = delete;
   ~cmInstallExportGenerator() override;
 
@@ -71,6 +71,7 @@ protected:
   std::string const Namespace;
   std::string const CxxModulesDirectory;
   bool const ExportOld;
+  bool const ExportPackageDependencies;
   cmLocalGenerator* LocalGenerator = nullptr;
 
   std::string TempDir;

@@ -99,6 +99,12 @@ public:
    */
   bool SupportsCustomCommandDepfile() const override { return true; }
 
+  /**
+   * Utilized to determine if this generator
+   * supports linker dependency file.
+   */
+  bool SupportsLinkerDependencyFile() const override { return true; }
+
   /** Get the documentation entry for this generator.  */
   static cmDocumentationEntry GetDocumentation();
 
@@ -113,6 +119,8 @@ public:
                       bool optional) override;
 
   void Configure() override;
+
+  bool IsGNUMakeJobServerAware() const override { return true; }
 
   /**
    * Generate the all required files for building this project/tree. This

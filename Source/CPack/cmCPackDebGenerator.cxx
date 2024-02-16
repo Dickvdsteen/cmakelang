@@ -20,6 +20,7 @@
 #include "cmCPackLog.h"
 #include "cmCryptoHash.h"
 #include "cmGeneratedFileStream.h"
+#include "cmList.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
 #include "cmValue.h"
@@ -289,8 +290,8 @@ std::string DebGenerator::generateMD5File() const
       continue;
     }
 
-    std::string output =
-      cmSystemTools::ComputeFileHash(file, cmCryptoHash::AlgoMD5);
+    cmCryptoHash hasher(cmCryptoHash::AlgoMD5);
+    std::string output = hasher.HashFile(file);
     if (output.empty()) {
       cmCPackLogger(cmCPackLog::LOG_ERROR,
                     "Problem computing the md5 of " << file << std::endl);
@@ -427,8 +428,7 @@ bool DebGenerator::generateControlTar(std::string const& md5Filename) const
     // default
     control_tar.ClearPermissions();
 
-    std::vector<std::string> controlExtraList =
-      cmExpandedList(this->ControlExtra);
+    cmList controlExtraList{ this->ControlExtra };
     for (std::string const& i : controlExtraList) {
       std::string filenamename = cmsys::SystemTools::GetFilenameName(i);
       std::string localcopy = this->WorkDir + "/" + filenamename;

@@ -4,7 +4,7 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cstdlib>
+#include <cstddef>
 #include <functional>
 #include <iostream>
 #include <iterator>
@@ -14,7 +14,7 @@
 
 #include "cmsys/RegularExpression.hxx"
 
-#include "cmCMakePresetErrors.h"
+#include "cmCMakePresetsErrors.h"
 #include "cmCMakePresetsGraphInternal.h"
 #include "cmStringAlgorithms.h"
 #include "cmSystemTools.h"
@@ -49,6 +49,7 @@ template <typename T>
 using PresetPair = cmCMakePresetsGraph::PresetPair<T>;
 using ExpandMacroResult = cmCMakePresetsGraphInternal::ExpandMacroResult;
 using MacroExpander = cmCMakePresetsGraphInternal::MacroExpander;
+using cmCMakePresetsGraphInternal::ExpandMacros;
 
 void InheritString(std::string& child, const std::string& parent)
 {
@@ -88,8 +89,8 @@ bool VisitPreset(
 {
   switch (cycleStatus[preset.Name]) {
     case CycleStatus::InProgress:
-      cmCMakePresetErrors::CYCLIC_PRESET_INHERITANCE(preset.Name,
-                                                     &graph.parseState);
+      cmCMakePresetsErrors::CYCLIC_PRESET_INHERITANCE(preset.Name,
+                                                      &graph.parseState);
       return false;
     case CycleStatus::Verified:
       return true;
@@ -100,27 +101,27 @@ bool VisitPreset(
   cycleStatus[preset.Name] = CycleStatus::InProgress;
 
   if (preset.Environment.count("") != 0) {
-    cmCMakePresetErrors::INVALID_PRESET_NAMED(preset.Name, &graph.parseState);
+    cmCMakePresetsErrors::INVALID_PRESET_NAMED(preset.Name, &graph.parseState);
     return false;
   }
 
   bool result = preset.VisitPresetBeforeInherit();
   if (!result) {
-    cmCMakePresetErrors::INVALID_PRESET_NAMED(preset.Name, &graph.parseState);
+    cmCMakePresetsErrors::INVALID_PRESET_NAMED(preset.Name, &graph.parseState);
     return false;
   }
 
   for (auto const& i : preset.Inherits) {
     auto parent = presets.find(i);
     if (parent == presets.end()) {
-      cmCMakePresetErrors::INVALID_PRESET_NAMED(preset.Name,
-                                                &graph.parseState);
+      cmCMakePresetsErrors::INVALID_PRESET_NAMED(preset.Name,
+                                                 &graph.parseState);
       return false;
     }
 
     auto& parentPreset = parent->second.Unexpanded;
     if (!preset.OriginFile->ReachableFiles.count(parentPreset.OriginFile)) {
-      cmCMakePresetErrors::INHERITED_PRESET_UNREACHABLE_FROM_FILE(
+      cmCMakePresetsErrors::INHERITED_PRESET_UNREACHABLE_FROM_FILE(
         preset.Name, &graph.parseState);
       return false;
     }
@@ -131,8 +132,8 @@ bool VisitPreset(
 
     result = preset.VisitPresetInherit(parentPreset);
     if (!result) {
-      cmCMakePresetErrors::INVALID_PRESET_NAMED(preset.Name,
-                                                &graph.parseState);
+      cmCMakePresetsErrors::INVALID_PRESET_NAMED(preset.Name,
+                                                 &graph.parseState);
       return false;
     }
 
@@ -152,7 +153,7 @@ bool VisitPreset(
   result = preset.VisitPresetAfterInherit(graph.GetVersion(preset),
                                           &graph.parseState);
   if (!result) {
-    cmCMakePresetErrors::INVALID_PRESET_NAMED(preset.Name, &graph.parseState);
+    cmCMakePresetsErrors::INVALID_PRESET_NAMED(preset.Name, &graph.parseState);
     return false;
   }
 
@@ -204,14 +205,6 @@ bool IsValidMacroNamespace(const std::string& str)
 ExpandMacroResult VisitEnv(std::string& value, CycleStatus& status,
                            const std::vector<MacroExpander>& macroExpanders,
                            int version);
-ExpandMacroResult ExpandMacros(
-  std::string& out, const std::vector<MacroExpander>& macroExpanders,
-  int version);
-ExpandMacroResult ExpandMacro(std::string& out,
-                              const std::string& macroNamespace,
-                              const std::string& macroName,
-                              const std::vector<MacroExpander>& macroExpanders,
-                              int version);
 
 bool ExpandMacros(const cmCMakePresetsGraph& graph,
                   const ConfigurePreset& preset,
@@ -448,9 +441,9 @@ bool ExpandMacros(cmCMakePresetsGraph& graph, const T& preset,
       if (macroName.empty()) {
         return ExpandMacroResult::Error;
       }
-      const char* value = std::getenv(macroName.c_str());
-      if (value) {
-        result += value;
+      if (cm::optional<std::string> value =
+            cmSystemTools::GetEnvVar(macroName)) {
+        result += *value;
       }
       return ExpandMacroResult::Ok;
     }
@@ -466,8 +459,8 @@ bool ExpandMacros(cmCMakePresetsGraph& graph, const T& preset,
       switch (VisitEnv(*v.second, envCycles[v.first], macroExpanders,
                        graph.GetVersion(preset))) {
         case ExpandMacroResult::Error:
-          cmCMakePresetErrors::INVALID_PRESET_NAMED(preset.Name,
-                                                    &graph.parseState);
+          cmCMakePresetsErrors::INVALID_PRESET_NAMED(preset.Name,
+                                                     &graph.parseState);
           return false;
         case ExpandMacroResult::Ignore:
           out.reset();
@@ -482,8 +475,8 @@ bool ExpandMacros(cmCMakePresetsGraph& graph, const T& preset,
     cm::optional<bool> result;
     if (!preset.ConditionEvaluator->Evaluate(
           macroExpanders, graph.GetVersion(preset), result)) {
-      cmCMakePresetErrors::INVALID_PRESET_NAMED(preset.Name,
-                                                &graph.parseState);
+      cmCMakePresetsErrors::INVALID_PRESET_NAMED(preset.Name,
+                                                 &graph.parseState);
       return false;
     }
     if (!result) {
@@ -515,8 +508,9 @@ ExpandMacroResult VisitEnv(std::string& value, CycleStatus& status,
   status = CycleStatus::Verified;
   return ExpandMacroResult::Ok;
 }
+}
 
-ExpandMacroResult ExpandMacros(
+ExpandMacroResult cmCMakePresetsGraphInternal::ExpandMacros(
   std::string& out, const std::vector<MacroExpander>& macroExpanders,
   int version)
 {
@@ -595,11 +589,10 @@ ExpandMacroResult ExpandMacros(
   return ExpandMacroResult::Ok;
 }
 
-ExpandMacroResult ExpandMacro(std::string& out,
-                              const std::string& macroNamespace,
-                              const std::string& macroName,
-                              const std::vector<MacroExpander>& macroExpanders,
-                              int version)
+ExpandMacroResult cmCMakePresetsGraphInternal::ExpandMacro(
+  std::string& out, const std::string& macroNamespace,
+  const std::string& macroName,
+  const std::vector<MacroExpander>& macroExpanders, int version)
 {
   for (auto const& macroExpander : macroExpanders) {
     auto result = macroExpander(macroNamespace, macroName, out, version);
@@ -615,13 +608,14 @@ ExpandMacroResult ExpandMacro(std::string& out,
   return ExpandMacroResult::Error;
 }
 
+namespace {
 template <typename T>
 bool SetupWorkflowConfigurePreset(const T& preset,
                                   const ConfigurePreset*& configurePreset,
                                   cmJSONState* state)
 {
   if (preset.ConfigurePreset != configurePreset->Name) {
-    cmCMakePresetErrors::INVALID_WORKFLOW_STEPS(configurePreset->Name, state);
+    cmCMakePresetsErrors::INVALID_WORKFLOW_STEPS(configurePreset->Name, state);
     return false;
   }
   return true;
@@ -644,12 +638,12 @@ bool TryReachPresetFromWorkflow(
 {
   auto it = presets.find(name);
   if (it == presets.end()) {
-    cmCMakePresetErrors::INVALID_WORKFLOW_STEPS(name, state);
+    cmCMakePresetsErrors::INVALID_WORKFLOW_STEPS(name, state);
     return false;
   }
   if (!origin.OriginFile->ReachableFiles.count(
         it->second.Unexpanded.OriginFile)) {
-    cmCMakePresetErrors::WORKFLOW_STEP_UNREACHABLE_FROM_FILE(name, state);
+    cmCMakePresetsErrors::WORKFLOW_STEP_UNREACHABLE_FROM_FILE(name, state);
     return false;
   }
   return SetupWorkflowConfigurePreset<T>(it->second.Unexpanded,
@@ -799,13 +793,13 @@ bool cmCMakePresetsGraph::ConfigurePreset::VisitPresetAfterInherit(
   if (!preset.Hidden) {
     if (version < 3) {
       if (preset.Generator.empty()) {
-        cmCMakePresetErrors::PRESET_MISSING_FIELD(preset.Name, "generator",
-                                                  state);
+        cmCMakePresetsErrors::PRESET_MISSING_FIELD(preset.Name, "generator",
+                                                   state);
         return false;
       }
       if (preset.BinaryDir.empty()) {
-        cmCMakePresetErrors::PRESET_MISSING_FIELD(preset.Name, "binaryDir",
-                                                  state);
+        cmCMakePresetsErrors::PRESET_MISSING_FIELD(preset.Name, "binaryDir",
+                                                   state);
         return false;
       }
     }
@@ -1070,7 +1064,7 @@ bool cmCMakePresetsGraph::ReadProjectPresetsInternal(bool allowNoFiles)
     if (allowNoFiles) {
       return true;
     }
-    cmCMakePresetErrors::FILE_NOT_FOUND(filename, &this->parseState);
+    cmCMakePresetsErrors::FILE_NOT_FOUND(filename, &this->parseState);
     return false;
   }
 
@@ -1086,8 +1080,8 @@ bool cmCMakePresetsGraph::ReadProjectPresetsInternal(bool allowNoFiles)
 
   for (auto& it : this->ConfigurePresets) {
     if (!ExpandMacros(*this, it.second.Unexpanded, it.second.Expanded)) {
-      cmCMakePresetErrors::INVALID_MACRO_EXPANSION(it.first,
-                                                   &this->parseState);
+      cmCMakePresetsErrors::INVALID_MACRO_EXPANSION(it.first,
+                                                    &this->parseState);
       return false;
     }
   }
@@ -1097,13 +1091,13 @@ bool cmCMakePresetsGraph::ReadProjectPresetsInternal(bool allowNoFiles)
       const auto configurePreset =
         this->ConfigurePresets.find(it.second.Unexpanded.ConfigurePreset);
       if (configurePreset == this->ConfigurePresets.end()) {
-        cmCMakePresetErrors::INVALID_CONFIGURE_PRESET(it.first,
-                                                      &this->parseState);
+        cmCMakePresetsErrors::INVALID_CONFIGURE_PRESET(it.first,
+                                                       &this->parseState);
         return false;
       }
       if (!it.second.Unexpanded.OriginFile->ReachableFiles.count(
             configurePreset->second.Unexpanded.OriginFile)) {
-        cmCMakePresetErrors::CONFIGURE_PRESET_UNREACHABLE_FROM_FILE(
+        cmCMakePresetsErrors::CONFIGURE_PRESET_UNREACHABLE_FROM_FILE(
           it.first, &this->parseState);
         return false;
       }
@@ -1116,8 +1110,8 @@ bool cmCMakePresetsGraph::ReadProjectPresetsInternal(bool allowNoFiles)
     }
 
     if (!ExpandMacros(*this, it.second.Unexpanded, it.second.Expanded)) {
-      cmCMakePresetErrors::INVALID_MACRO_EXPANSION(it.first,
-                                                   &this->parseState);
+      cmCMakePresetsErrors::INVALID_MACRO_EXPANSION(it.first,
+                                                    &this->parseState);
       return false;
     }
   }
@@ -1127,13 +1121,13 @@ bool cmCMakePresetsGraph::ReadProjectPresetsInternal(bool allowNoFiles)
       const auto configurePreset =
         this->ConfigurePresets.find(it.second.Unexpanded.ConfigurePreset);
       if (configurePreset == this->ConfigurePresets.end()) {
-        cmCMakePresetErrors::INVALID_CONFIGURE_PRESET(it.first,
-                                                      &this->parseState);
+        cmCMakePresetsErrors::INVALID_CONFIGURE_PRESET(it.first,
+                                                       &this->parseState);
         return false;
       }
       if (!it.second.Unexpanded.OriginFile->ReachableFiles.count(
             configurePreset->second.Unexpanded.OriginFile)) {
-        cmCMakePresetErrors::CONFIGURE_PRESET_UNREACHABLE_FROM_FILE(
+        cmCMakePresetsErrors::CONFIGURE_PRESET_UNREACHABLE_FROM_FILE(
           it.first, &this->parseState);
         return false;
       }
@@ -1146,8 +1140,8 @@ bool cmCMakePresetsGraph::ReadProjectPresetsInternal(bool allowNoFiles)
     }
 
     if (!ExpandMacros(*this, it.second.Unexpanded, it.second.Expanded)) {
-      cmCMakePresetErrors::INVALID_MACRO_EXPANSION(it.first,
-                                                   &this->parseState);
+      cmCMakePresetsErrors::INVALID_MACRO_EXPANSION(it.first,
+                                                    &this->parseState);
       return false;
     }
   }
@@ -1157,13 +1151,13 @@ bool cmCMakePresetsGraph::ReadProjectPresetsInternal(bool allowNoFiles)
       const auto configurePreset =
         this->ConfigurePresets.find(it.second.Unexpanded.ConfigurePreset);
       if (configurePreset == this->ConfigurePresets.end()) {
-        cmCMakePresetErrors::INVALID_CONFIGURE_PRESET(it.first,
-                                                      &this->parseState);
+        cmCMakePresetsErrors::INVALID_CONFIGURE_PRESET(it.first,
+                                                       &this->parseState);
         return false;
       }
       if (!it.second.Unexpanded.OriginFile->ReachableFiles.count(
             configurePreset->second.Unexpanded.OriginFile)) {
-        cmCMakePresetErrors::CONFIGURE_PRESET_UNREACHABLE_FROM_FILE(
+        cmCMakePresetsErrors::CONFIGURE_PRESET_UNREACHABLE_FROM_FILE(
           it.first, &this->parseState);
         return false;
       }
@@ -1176,8 +1170,8 @@ bool cmCMakePresetsGraph::ReadProjectPresetsInternal(bool allowNoFiles)
     }
 
     if (!ExpandMacros(*this, it.second.Unexpanded, it.second.Expanded)) {
-      cmCMakePresetErrors::INVALID_MACRO_EXPANSION(it.first,
-                                                   &this->parseState);
+      cmCMakePresetsErrors::INVALID_MACRO_EXPANSION(it.first,
+                                                    &this->parseState);
       return false;
     }
   }
@@ -1188,12 +1182,12 @@ bool cmCMakePresetsGraph::ReadProjectPresetsInternal(bool allowNoFiles)
     const ConfigurePreset* configurePreset = nullptr;
     for (auto const& step : it.second.Unexpanded.Steps) {
       if (configurePreset == nullptr && step.PresetType != Type::Configure) {
-        cmCMakePresetErrors::FIRST_WORKFLOW_STEP_NOT_CONFIGURE(
+        cmCMakePresetsErrors::FIRST_WORKFLOW_STEP_NOT_CONFIGURE(
           step.PresetName, &this->parseState);
         return false;
       }
       if (configurePreset != nullptr && step.PresetType == Type::Configure) {
-        cmCMakePresetErrors::CONFIGURE_WORKFLOW_STEP_NOT_FIRST(
+        cmCMakePresetsErrors::CONFIGURE_WORKFLOW_STEP_NOT_FIRST(
           step.PresetName, &this->parseState);
         return false;
       }
@@ -1226,13 +1220,13 @@ bool cmCMakePresetsGraph::ReadProjectPresetsInternal(bool allowNoFiles)
     }
 
     if (configurePreset == nullptr) {
-      cmCMakePresetErrors::NO_WORKFLOW_STEPS(it.first, &this->parseState);
+      cmCMakePresetsErrors::NO_WORKFLOW_STEPS(it.first, &this->parseState);
       return false;
     }
 
     if (!ExpandMacros(*this, it.second.Unexpanded, it.second.Expanded)) {
-      cmCMakePresetErrors::INVALID_MACRO_EXPANSION(it.first,
-                                                   &this->parseState);
+      cmCMakePresetsErrors::INVALID_MACRO_EXPANSION(it.first,
+                                                    &this->parseState);
       return false;
     }
   }

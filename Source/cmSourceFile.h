@@ -41,8 +41,11 @@ public:
   void SetCustomCommand(std::unique_ptr<cmCustomCommand> cc);
 
   //! Set/Get a property of this source file
-  void SetProperty(const std::string& prop, const char* value);
   void SetProperty(const std::string& prop, cmValue value);
+  void RemoveProperty(const std::string& prop)
+  {
+    this->SetProperty(prop, cmValue{ nullptr });
+  }
   void SetProperty(const std::string& prop, const std::string& value)
   {
     this->SetProperty(prop, cmValue(value));

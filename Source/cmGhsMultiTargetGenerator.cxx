@@ -6,6 +6,7 @@
 #include <memory>
 #include <ostream>
 #include <set>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -17,6 +18,7 @@
 #include "cmGeneratorTarget.h"
 #include "cmGlobalGhsMultiGenerator.h"
 #include "cmLinkLineComputer.h" // IWYU pragma: keep
+#include "cmList.h"
 #include "cmLocalGenerator.h"
 #include "cmLocalGhsMultiGenerator.h"
 #include "cmMakefile.h"
@@ -114,6 +116,19 @@ void cmGhsMultiTargetGenerator::Generate()
 
 void cmGhsMultiTargetGenerator::GenerateTarget()
 {
+  if (this->GeneratorTarget->GetType() == cmStateEnums::EXECUTABLE &&
+      !this->GeneratorTarget
+         ->GetLinkerTypeProperty(
+           this->GeneratorTarget->GetLinkerLanguage(this->ConfigName),
+           this->ConfigName)
+         .empty()) {
+    // Green Hill MULTI does not support this feature.
+    cmSystemTools::Message(
+      cmStrCat("'LINKER_TYPE' property, specified on target '",
+               this->GeneratorTarget->GetName(),
+               "', is not supported by this generator."));
+  }
+
   // Open the target file in copy-if-different mode.
   std::string fproj =
     cmStrCat(this->LocalGenerator->GetCurrentBinaryDirectory(), '/',
@@ -414,7 +429,9 @@ void cmGhsMultiTargetGenerator::WriteCustomCommandsHelper(
 #endif
   // Echo the custom command's comment text.
   if (cm::optional<std::string> comment = ccg.GetComment()) {
-    std::string echocmd = cmStrCat("echo ", *comment);
+    std::string escapedComment = this->LocalGenerator->EscapeForShell(
+      *comment, ccg.GetCC().GetEscapeAllowMakeVars());
+    std::string echocmd = cmStrCat("echo ", escapedComment);
     cmdLines.push_back(std::move(echocmd));
   }
 
@@ -484,7 +501,7 @@ void cmGhsMultiTargetGenerator::WriteSourceProperty(
 {
   cmValue prop = sf->GetProperty(propName);
   if (prop) {
-    std::vector<std::string> list = cmExpandedList(*prop);
+    cmList list{ *prop };
     for (const std::string& p : list) {
       fout << "    " << propFlag << p << '\n';
     }
