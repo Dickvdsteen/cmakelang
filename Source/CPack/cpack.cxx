@@ -113,7 +113,7 @@ int main(int argc, char const* const* argv)
   log.SetOutputPrefix("CPack: ");
   log.SetVerbosePrefix("CPack Verbose: ");
 
-  if (cmSystemTools::GetCurrentWorkingDirectory().empty()) {
+  if (cmSystemTools::GetLogicalWorkingDirectory().empty()) {
     cmCPack_Log(&log, cmCPackLog::LOG_ERROR,
                 "Current working directory cannot be established.\n");
     return 1;
@@ -208,6 +208,7 @@ int main(int argc, char const* const* argv)
     CommandArgument{ "--list-presets", CommandArgument::Values::Zero,
                      CommandArgument::setToTrue(listPresets) },
     CommandArgument{ "-D", CommandArgument::Values::One,
+                     CommandArgument::RequiresSeparator::No,
                      [&log, &definitions](const std::string& arg, cmake*,
                                           cmMakefile*) -> bool {
                        std::string value = arg;
@@ -254,7 +255,7 @@ int main(int argc, char const* const* argv)
 
   // Set up presets
   if (!preset.empty() || listPresets) {
-    const auto workingDirectory = cmSystemTools::GetCurrentWorkingDirectory();
+    const auto workingDirectory = cmSystemTools::GetLogicalWorkingDirectory();
 
     auto const presetGeneratorsPresent =
       [&generators](const cmCMakePresetsGraph::PackagePreset& p) {
@@ -349,7 +350,8 @@ int main(int argc, char const* const* argv)
       return 1;
     }
 
-    cmSystemTools::ChangeDirectory(expandedConfigurePreset->BinaryDir);
+    cmSystemTools::SetLogicalWorkingDirectory(
+      expandedConfigurePreset->BinaryDir);
 
     auto presetEnvironment = expandedPreset->Environment;
     for (auto const& var : presetEnvironment) {
@@ -404,8 +406,10 @@ int main(int argc, char const* const* argv)
               "Read CPack config file: " << cpackConfigFile << '\n');
 
   bool cpackConfigFileSpecified = true;
-  if (cpackConfigFile.empty()) {
-    cpackConfigFile = cmStrCat(cmSystemTools::GetCurrentWorkingDirectory(),
+  if (!cpackConfigFile.empty()) {
+    cpackConfigFile = cmSystemTools::ToNormalizedPathOnDisk(cpackConfigFile);
+  } else {
+    cpackConfigFile = cmStrCat(cmSystemTools::GetLogicalWorkingDirectory(),
                                "/CPackConfig.cmake");
     cpackConfigFileSpecified = false;
   }
@@ -446,7 +450,6 @@ int main(int argc, char const* const* argv)
     }
 
     if (cmSystemTools::FileExists(cpackConfigFile)) {
-      cpackConfigFile = cmSystemTools::CollapseFullPath(cpackConfigFile);
       cmCPack_Log(&log, cmCPackLog::LOG_VERBOSE,
                   "Read CPack configuration file: " << cpackConfigFile
                                                     << '\n');
@@ -475,31 +478,25 @@ int main(int argc, char const* const* argv)
     if (!cpackProjectVendor.empty()) {
       globalMF.AddDefinition("CPACK_PACKAGE_VENDOR", cpackProjectVendor);
     }
-    // if this is not empty it has been set on the command line
-    // go for it. Command line override values set in config file.
     if (!cpackProjectDirectory.empty()) {
-      globalMF.AddDefinition("CPACK_PACKAGE_DIRECTORY", cpackProjectDirectory);
-    }
-    // The value has not been set on the command line
-    else {
-      // get a default value (current working directory)
-      cpackProjectDirectory = cmSystemTools::GetCurrentWorkingDirectory();
-      // use default value if no value has been provided by the config file
-      if (!globalMF.IsSet("CPACK_PACKAGE_DIRECTORY")) {
-        globalMF.AddDefinition("CPACK_PACKAGE_DIRECTORY",
-                               cpackProjectDirectory);
+      // The value has been set on the command line.  Ensure it is absolute.
+      cpackProjectDirectory =
+        cmSystemTools::ToNormalizedPathOnDisk(cpackProjectDirectory);
+    } else {
+      // The value has not been set on the command line.  Check config file.
+      if (cmValue pd = globalMF.GetDefinition("CPACK_PACKAGE_DIRECTORY")) {
+        // The value has been set in the config file.  Ensure it is absolute.
+        cpackProjectDirectory = cmSystemTools::CollapseFullPath(*pd);
+      } else {
+        // Default to the current working directory.
+        cpackProjectDirectory = cmSystemTools::GetLogicalWorkingDirectory();
       }
     }
+    globalMF.AddDefinition("CPACK_PACKAGE_DIRECTORY", cpackProjectDirectory);
+
     for (auto const& cd : definitions) {
       globalMF.AddDefinition(cd.first, cd.second);
     }
-
-    // Force CPACK_PACKAGE_DIRECTORY as absolute path
-    cpackProjectDirectory =
-      globalMF.GetSafeDefinition("CPACK_PACKAGE_DIRECTORY");
-    cpackProjectDirectory =
-      cmSystemTools::CollapseFullPath(cpackProjectDirectory);
-    globalMF.AddDefinition("CPACK_PACKAGE_DIRECTORY", cpackProjectDirectory);
 
     cmValue cpackModulesPath = globalMF.GetDefinition("CPACK_MODULE_PATH");
     if (cpackModulesPath) {
@@ -588,7 +585,7 @@ int main(int argc, char const* const* argv)
               cmValue projVersionPatch =
                 mf->GetDefinition("CPACK_PACKAGE_VERSION_PATCH");
               std::ostringstream ostr;
-              ostr << *projVersionMajor << "." << *projVersionMinor << '.'
+              ostr << *projVersionMajor << '.' << *projVersionMinor << '.'
                    << *projVersionPatch;
               mf->AddDefinition("CPACK_PACKAGE_VERSION", ostr.str());
             }

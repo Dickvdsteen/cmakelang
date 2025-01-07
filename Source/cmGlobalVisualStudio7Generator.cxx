@@ -309,46 +309,6 @@ void cmGlobalVisualStudio7Generator::Generate()
     this->CallVisualStudioMacro(MacroReload,
                                 GetSLNFile(this->LocalGenerators[0].get()));
   }
-
-  if (this->Version == VSVersion::VS9 &&
-      !this->CMakeInstance->GetIsInTryCompile()) {
-    std::string cmakeWarnVS9;
-    if (cmValue cached = this->CMakeInstance->GetState()->GetCacheEntryValue(
-          "CMAKE_WARN_VS9")) {
-      this->CMakeInstance->MarkCliAsUsed("CMAKE_WARN_VS9");
-      cmakeWarnVS9 = *cached;
-    } else {
-      cmSystemTools::GetEnv("CMAKE_WARN_VS9", cmakeWarnVS9);
-    }
-    if (cmakeWarnVS9.empty() || !cmIsOff(cmakeWarnVS9)) {
-      this->CMakeInstance->IssueMessage(
-        MessageType::WARNING,
-        "The \"Visual Studio 9 2008\" generator is deprecated "
-        "and will be removed in a future version of CMake."
-        "\n"
-        "Add CMAKE_WARN_VS9=OFF to the cache to disable this warning.");
-    }
-  }
-
-  if (this->Version == VSVersion::VS12 &&
-      !this->CMakeInstance->GetIsInTryCompile()) {
-    std::string cmakeWarnVS12;
-    if (cmValue cached = this->CMakeInstance->GetState()->GetCacheEntryValue(
-          "CMAKE_WARN_VS12")) {
-      this->CMakeInstance->MarkCliAsUsed("CMAKE_WARN_VS12");
-      cmakeWarnVS12 = *cached;
-    } else {
-      cmSystemTools::GetEnv("CMAKE_WARN_VS12", cmakeWarnVS12);
-    }
-    if (cmakeWarnVS12.empty() || !cmIsOff(cmakeWarnVS12)) {
-      this->CMakeInstance->IssueMessage(
-        MessageType::WARNING,
-        "The \"Visual Studio 12 2013\" generator is deprecated "
-        "and will be removed in a future version of CMake."
-        "\n"
-        "Add CMAKE_WARN_VS12=OFF to the cache to disable this warning.");
-    }
-  }
 }
 
 void cmGlobalVisualStudio7Generator::OutputSLNFile(
@@ -403,8 +363,7 @@ void cmGlobalVisualStudio7Generator::WriteTargetConfigurations(
         std::string mapping;
 
         // On VS 19 and above, always map .NET SDK projects to "Any CPU".
-        if (target->IsDotNetSdkTarget() &&
-            this->GetVersion() >= VSVersion::VS16 &&
+        if (target->IsDotNetSdkTarget() && this->Version >= VSVersion::VS16 &&
             !cmGlobalVisualStudio7Generator::IsReservedTarget(
               target->GetName())) {
           mapping = "Any CPU";
@@ -414,6 +373,40 @@ void cmGlobalVisualStudio7Generator::WriteTargetConfigurations(
       }
     }
   }
+}
+
+cmVisualStudioFolder* cmGlobalVisualStudio7Generator::CreateSolutionFolders(
+  const std::string& path)
+{
+  if (path.empty()) {
+    return nullptr;
+  }
+
+  std::vector<std::string> tokens =
+    cmSystemTools::SplitString(path, '/', false);
+
+  std::string cumulativePath;
+
+  for (std::string const& iter : tokens) {
+    if (iter.empty()) {
+      continue;
+    }
+
+    if (cumulativePath.empty()) {
+      cumulativePath = cmStrCat("CMAKE_FOLDER_GUID_", iter);
+    } else {
+      this->VisualStudioFolders[cumulativePath].Projects.insert(
+        cmStrCat(cumulativePath, '/', iter));
+
+      cumulativePath = cmStrCat(cumulativePath, '/', iter);
+    }
+  }
+
+  if (cumulativePath.empty()) {
+    return nullptr;
+  }
+
+  return &this->VisualStudioFolders[cumulativePath];
 }
 
 void cmGlobalVisualStudio7Generator::WriteTargetsToSolution(
@@ -462,31 +455,11 @@ void cmGlobalVisualStudio7Generator::WriteTargetsToSolution(
     // Create "solution folder" information from FOLDER target property
     //
     if (written && this->UseFolderProperty()) {
-      const std::string targetFolder = target->GetEffectiveFolderName();
-      if (!targetFolder.empty()) {
-        std::vector<std::string> tokens =
-          cmSystemTools::SplitString(targetFolder, '/', false);
+      cmVisualStudioFolder* folder =
+        this->CreateSolutionFolders(target->GetEffectiveFolderName());
 
-        std::string cumulativePath;
-
-        for (std::string const& iter : tokens) {
-          if (iter.empty()) {
-            continue;
-          }
-
-          if (cumulativePath.empty()) {
-            cumulativePath = cmStrCat("CMAKE_FOLDER_GUID_", iter);
-          } else {
-            VisualStudioFolders[cumulativePath].insert(
-              cmStrCat(cumulativePath, '/', iter));
-
-            cumulativePath = cmStrCat(cumulativePath, '/', iter);
-          }
-        }
-
-        if (!cumulativePath.empty()) {
-          VisualStudioFolders[cumulativePath].insert(target->GetName());
-        }
+      if (folder != nullptr) {
+        folder->Projects.insert(target->GetName());
       }
     }
   }
@@ -508,7 +481,13 @@ void cmGlobalVisualStudio7Generator::WriteFolders(std::ostream& fout)
     std::string nameOnly = cmSystemTools::GetFilenameName(fullName);
 
     fout << "Project(\"{" << guidProjectTypeFolder << "}\") = \"" << nameOnly
-         << "\", \"" << fullName << "\", \"{" << guid << "}\"\nEndProject\n";
+         << "\", \"" << fullName << "\", \"{" << guid << "}\"\n";
+
+    if (!iter.second.SolutionItems.empty()) {
+      this->WriteFolderSolutionItems(fout, iter.second);
+    }
+
+    fout << "EndProject\n";
   }
 }
 
@@ -518,7 +497,7 @@ void cmGlobalVisualStudio7Generator::WriteFoldersContent(std::ostream& fout)
     std::string key(iter.first);
     std::string guidParent(this->GetGUID(key));
 
-    for (std::string const& it : iter.second) {
+    for (std::string const& it : iter.second.Projects) {
       std::string const& value(it);
       std::string guid(this->GetGUID(value));
 
@@ -740,7 +719,7 @@ std::set<std::string> cmGlobalVisualStudio7Generator::IsPartOfDefaultBuild(
   }
   // inspect EXCLUDE_FROM_DEFAULT_BUILD[_<CONFIG>] properties
   for (std::string const& i : configs) {
-    if (cmIsOff(target->GetFeature("EXCLUDE_FROM_DEFAULT_BUILD", i))) {
+    if (target->GetFeature("EXCLUDE_FROM_DEFAULT_BUILD", i).IsOff()) {
       activeConfigs.insert(i);
     }
   }

@@ -281,6 +281,7 @@ function(CMAKE_DETERMINE_COMPILER_ID lang flagvar src)
   elseif("x${CMAKE_${lang}_COMPILER_ID}" STREQUAL "xGNU"
     OR "x${CMAKE_${lang}_COMPILER_ID}" STREQUAL "xAppleClang"
     OR "x${CMAKE_${lang}_COMPILER_ID}" STREQUAL "xFujitsuClang"
+    OR "x${CMAKE_${lang}_COMPILER_ID}" STREQUAL "xIBMClang"
     OR "x${CMAKE_${lang}_COMPILER_ID}" STREQUAL "xTIClang")
     set(CMAKE_${lang}_COMPILER_FRONTEND_VARIANT "GNU")
   elseif("x${CMAKE_${lang}_COMPILER_ID}" STREQUAL "xMSVC")
@@ -288,6 +289,52 @@ function(CMAKE_DETERMINE_COMPILER_ID lang flagvar src)
   else()
     set(CMAKE_${lang}_COMPILER_FRONTEND_VARIANT "")
   endif()
+
+  # `clang-scan-deps` needs to know the resource directory. This only matters
+  # for C++ and the GNU-frontend variant.
+  set(CMAKE_${lang}_COMPILER_CLANG_RESOURCE_DIR "")
+  if ("x${lang}" STREQUAL "xCXX" AND
+      "x${CMAKE_${lang}_COMPILER_ID}" STREQUAL "xClang" AND
+      "x${CMAKE_${lang}_COMPILER_FRONTEND_VARIANT}" STREQUAL "xGNU")
+    execute_process(
+      COMMAND "${CMAKE_${lang}_COMPILER}"
+        ${CMAKE_${lang}_COMPILER_ID_ARG1}
+        -print-resource-dir
+      OUTPUT_VARIABLE _clang_resource_dir_out
+      ERROR_VARIABLE _clang_resource_dir_err
+      RESULT_VARIABLE _clang_resource_dir_res
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_STRIP_TRAILING_WHITESPACE)
+    if (_clang_resource_dir_res EQUAL 0)
+      file(TO_CMAKE_PATH "${_clang_resource_dir_out}" _clang_resource_dir_out)
+      if(IS_DIRECTORY "${_clang_resource_dir_out}")
+        set(CMAKE_${lang}_COMPILER_CLANG_RESOURCE_DIR "${_clang_resource_dir_out}")
+      endif()
+    endif ()
+  endif ()
+
+  set(CMAKE_${lang}_STANDARD_LIBRARY "")
+  if ("x${lang}" STREQUAL "xCXX" AND
+      EXISTS "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/${lang}-DetectStdlib.h" AND
+      "x${CMAKE_${lang}_COMPILER_ID}" STREQUAL "xClang" AND
+      "x${CMAKE_${lang}_COMPILER_FRONTEND_VARIANT}" STREQUAL "xGNU")
+    # See #20851 for a proper abstraction for this.
+    execute_process(
+      COMMAND "${CMAKE_${lang}_COMPILER}"
+        ${CMAKE_${lang}_COMPILER_ID_ARG1}
+        ${CMAKE_CXX_COMPILER_ID_FLAGS_LIST}
+        -E
+        -x c++-header
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/${lang}-DetectStdlib.h"
+        -o - # Write to stdout.
+      OUTPUT_VARIABLE _lang_stdlib_out
+      ERROR_VARIABLE _lang_stdlib_err
+      RESULT_VARIABLE _lang_stdlib_res
+      ERROR_STRIP_TRAILING_WHITESPACE)
+    if (_lang_stdlib_res EQUAL 0)
+      string(REGEX REPLACE ".*CMAKE-STDLIB-DETECT: (.+)\n.*" "\\1" "CMAKE_${lang}_STANDARD_LIBRARY" "${_lang_stdlib_out}")
+    endif ()
+  endif ()
 
   # Display the final identification result.
   if(CMAKE_${lang}_COMPILER_ID)
@@ -301,8 +348,17 @@ function(CMAKE_DETERMINE_COMPILER_ID lang flagvar src)
     else()
       set(_archid "")
     endif()
+    if(CMAKE_${lang}_HOST_COMPILER_ID)
+      set(_hostcc " with host compiler ${CMAKE_${lang}_HOST_COMPILER_ID}")
+      if(CMAKE_${lang}_HOST_COMPILER_VERSION)
+        string(APPEND _hostcc " ${CMAKE_${lang}_HOST_COMPILER_VERSION}")
+      endif()
+    else()
+      set(_hostcc "")
+    endif()
     message(STATUS "The ${lang} compiler identification is "
-      "${CMAKE_${lang}_COMPILER_ID}${_archid}${_version}${_variant}")
+      "${CMAKE_${lang}_COMPILER_ID}${_archid}${_version}${_variant}${_hostcc}")
+    unset(_hostcc)
     unset(_archid)
     unset(_version)
     unset(_variant)
@@ -327,10 +383,14 @@ function(CMAKE_DETERMINE_COMPILER_ID lang flagvar src)
   set(CMAKE_${lang}_COMPILER_WRAPPER "${CMAKE_${lang}_COMPILER_WRAPPER}" PARENT_SCOPE)
   set(CMAKE_${lang}_SIMULATE_ID "${CMAKE_${lang}_SIMULATE_ID}" PARENT_SCOPE)
   set(CMAKE_${lang}_SIMULATE_VERSION "${CMAKE_${lang}_SIMULATE_VERSION}" PARENT_SCOPE)
+  set(CMAKE_${lang}_HOST_COMPILER_ID "${CMAKE_${lang}_HOST_COMPILER_ID}" PARENT_SCOPE)
+  set(CMAKE_${lang}_HOST_COMPILER_VERSION "${CMAKE_${lang}_HOST_COMPILER_VERSION}" PARENT_SCOPE)
   set(CMAKE_${lang}_STANDARD_COMPUTED_DEFAULT "${CMAKE_${lang}_STANDARD_COMPUTED_DEFAULT}" PARENT_SCOPE)
   set(CMAKE_${lang}_EXTENSIONS_COMPUTED_DEFAULT "${CMAKE_${lang}_EXTENSIONS_COMPUTED_DEFAULT}" PARENT_SCOPE)
   set(CMAKE_${lang}_COMPILER_PRODUCED_OUTPUT "${COMPILER_${lang}_PRODUCED_OUTPUT}" PARENT_SCOPE)
   set(CMAKE_${lang}_COMPILER_PRODUCED_FILES "${COMPILER_${lang}_PRODUCED_FILES}" PARENT_SCOPE)
+  set(CMAKE_${lang}_COMPILER_CLANG_RESOURCE_DIR "${CMAKE_${lang}_COMPILER_CLANG_RESOURCE_DIR}" PARENT_SCOPE)
+  set(CMAKE_${lang}_STANDARD_LIBRARY "${CMAKE_${lang}_STANDARD_LIBRARY}" PARENT_SCOPE)
 endfunction()
 
 include(CMakeCompilerIdDetection)
@@ -346,6 +406,22 @@ function(CMAKE_DETERMINE_COMPILER_ID_WRITE lang src)
     VERSION_STRINGS
     PLATFORM_DEFAULT_COMPILER
   )
+
+  if(lang MATCHES "^(CUDA|HIP)$")
+    compiler_id_detection(CMAKE_${lang}_HOST_COMPILER_ID_CONTENT CXX
+      PREFIX HOST_
+      ID_STRING
+      VERSION_STRINGS
+    )
+    string(APPEND CMAKE_${lang}_COMPILER_ID_CONTENT
+      "\n"
+      "\n"
+      "/* Detect host compiler used by NVCC. */\n"
+      "#ifdef __NVCC__\n"
+      "${CMAKE_${lang}_HOST_COMPILER_ID_CONTENT}\n"
+      "#endif /* __NVCC__ */\n"
+    )
+  endif()
 
   unset(src_in CACHE)
   string(CONFIGURE "${ID_CONTENT_IN}" ID_CONTENT_OUT @ONLY)
@@ -543,7 +619,7 @@ Id flags: ${testflags} ${CMAKE_${lang}_COMPILER_ID_FLAGS_ALWAYS}
       if(CMAKE_VS_PLATFORM_NAME STREQUAL x64)
         set(cuda_target "<TargetMachinePlatform>64</TargetMachinePlatform>")
       endif()
-      set(id_ItemDefinitionGroup_entry "<CudaCompile>${cuda_target}<AdditionalOptions>%(AdditionalOptions)-v</AdditionalOptions></CudaCompile>")
+      set(id_ItemDefinitionGroup_entry "<CudaCompile>${cuda_target}<AdditionalOptions>%(AdditionalOptions)-v -allow-unsupported-compiler</AdditionalOptions></CudaCompile>")
       set(id_PostBuildEvent_Command [[echo CMAKE_CUDA_COMPILER=$(CudaToolkitBinDir)\nvcc.exe]])
       if(CMAKE_VS_PLATFORM_TOOLSET_CUDA_CUSTOM_DIR)
         # check for legacy cuda custom toolkit folder structure
@@ -659,7 +735,7 @@ Id flags: ${testflags} ${CMAKE_${lang}_COMPILER_ID_FLAGS_ALWAYS}
         set(id_clang_cxx_library "CLANG_CXX_LIBRARY = \"${CMAKE_MATCH_3}\";")
       endif()
     endif()
-    if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_OSX_SYSROOT MATCHES "^$|[Mm][Aa][Cc][Oo][Ss]")
+    if(CMAKE_OSX_SYSROOT MATCHES "[Mm][Aa][Cc][Oo][Ss]" OR (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_OSX_SYSROOT STREQUAL ""))
       set(id_code_sign_identity "-")
       # When targeting macOS, use only the host architecture.
       if (_CMAKE_APPLE_ARCHS_DEFAULT)
@@ -893,11 +969,16 @@ function(CMAKE_DETERMINE_COMPILER_ID_CHECK lang file)
     set(ARCHITECTURE_ID)
     set(SIMULATE_ID)
     set(SIMULATE_VERSION)
+    set(HOST_COMPILER_ID)
+    set(HOST_COMPILER_VERSION)
     set(CMAKE_${lang}_COMPILER_ID_STRING_REGEX ".?I.?N.?F.?O.?:.?[A-Za-z0-9_]+\\[[^]]*\\]")
     foreach(encoding "" "ENCODING;UTF-16LE" "ENCODING;UTF-16BE")
+      cmake_policy(PUSH)
+      cmake_policy(SET CMP0159 NEW) # file(STRINGS) with REGEX updates CMAKE_MATCH_<n>
       file(STRINGS "${file}" CMAKE_${lang}_COMPILER_ID_STRINGS
         LIMIT_COUNT 38 ${encoding}
         REGEX "${CMAKE_${lang}_COMPILER_ID_STRING_REGEX}")
+      cmake_policy(POP)
       if(NOT CMAKE_${lang}_COMPILER_ID_STRINGS STREQUAL "")
         break()
       endif()
@@ -976,6 +1057,13 @@ function(CMAKE_DETERMINE_COMPILER_ID_CHECK lang file)
       if("${info}" MATCHES "INFO:qnxnto\\[\\]")
         set(COMPILER_QNXNTO 1)
       endif()
+      if("${info}" MATCHES "INFO:host_compiler\\[([^]\"]*)\\]")
+        set(HOST_COMPILER_ID "${CMAKE_MATCH_1}")
+      endif()
+      if("${info}" MATCHES "INFO:host_compiler_version\\[([^]\"]*)\\]")
+        string(REGEX REPLACE "^0+([0-9]+)" "\\1" HOST_COMPILER_VERSION "${CMAKE_MATCH_1}")
+        string(REGEX REPLACE "\\.0+([0-9])" ".\\1" HOST_COMPILER_VERSION "${HOST_COMPILER_VERSION}")
+      endif()
       if("${info}" MATCHES "INFO:standard_default\\[([^]\"]*)\\]")
         set(CMAKE_${lang}_STANDARD_COMPUTED_DEFAULT "${CMAKE_MATCH_1}")
       endif()
@@ -1037,6 +1125,8 @@ function(CMAKE_DETERMINE_COMPILER_ID_CHECK lang file)
       set(CMAKE_${lang}_COMPILER_VERSION_INTERNAL "${COMPILER_VERSION_INTERNAL}")
       set(CMAKE_${lang}_SIMULATE_ID "${SIMULATE_ID}")
       set(CMAKE_${lang}_SIMULATE_VERSION "${SIMULATE_VERSION}")
+      set(CMAKE_${lang}_HOST_COMPILER_ID "${HOST_COMPILER_ID}")
+      set(CMAKE_${lang}_HOST_COMPILER_VERSION "${HOST_COMPILER_VERSION}")
     endif()
 
     # Check the compiler identification string.
@@ -1044,7 +1134,12 @@ function(CMAKE_DETERMINE_COMPILER_ID_CHECK lang file)
       # The compiler identification was found.
       string(APPEND _CMAKE_${lang}_COMPILER_ID_LOG
         "The ${lang} compiler identification is ${CMAKE_${lang}_COMPILER_ID}, found in:\n"
-        "  ${file}\n\n")
+        "  ${file}\n")
+      if(CMAKE_${lang}_HOST_COMPILER_ID)
+        string(APPEND _CMAKE_${lang}_COMPILER_ID_LOG
+          "The host compiler identification is ${CMAKE_${lang}_HOST_COMPILER_ID}\n")
+      endif()
+      string(APPEND _CMAKE_${lang}_COMPILER_ID_LOG "\n")
     else()
       # The compiler identification could not be found.
       string(APPEND _CMAKE_${lang}_COMPILER_ID_LOG
@@ -1093,6 +1188,8 @@ function(CMAKE_DETERMINE_COMPILER_ID_CHECK lang file)
   set(COMPILER_QNXNTO "${COMPILER_QNXNTO}" PARENT_SCOPE)
   set(CMAKE_${lang}_STANDARD_COMPUTED_DEFAULT "${CMAKE_${lang}_STANDARD_COMPUTED_DEFAULT}" PARENT_SCOPE)
   set(CMAKE_${lang}_EXTENSIONS_COMPUTED_DEFAULT "${CMAKE_${lang}_EXTENSIONS_COMPUTED_DEFAULT}" PARENT_SCOPE)
+  set(CMAKE_${lang}_HOST_COMPILER_ID "${CMAKE_${lang}_HOST_COMPILER_ID}" PARENT_SCOPE)
+  set(CMAKE_${lang}_HOST_COMPILER_VERSION "${CMAKE_${lang}_HOST_COMPILER_VERSION}" PARENT_SCOPE)
 endfunction()
 
 #-----------------------------------------------------------------------------

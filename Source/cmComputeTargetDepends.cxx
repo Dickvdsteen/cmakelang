@@ -220,7 +220,7 @@ void cmComputeTargetDepends::CollectTargetDepends(size_t depender_index)
       emitted.insert(cmLinkItem(depender, true, cmListFileBacktrace()));
 
       if (cmLinkImplementation const* impl = depender->GetLinkImplementation(
-            it, cmGeneratorTarget::LinkInterfaceFor::Link)) {
+            it, cmGeneratorTarget::UseTo::Link)) {
         for (cmLinkImplItem const& lib : impl->Libraries) {
           // Don't emit the same library twice for this target.
           if (emitted.insert(lib).second) {
@@ -364,8 +364,6 @@ void cmComputeTargetDepends::AddTargetDepend(size_t depender_index,
       case cmPolicies::OLD:
         break;
       case cmPolicies::NEW:
-      case cmPolicies::REQUIRED_IF_USED:
-      case cmPolicies::REQUIRED_ALWAYS:
         issueMessage = true;
         messageType = MessageType::FATAL_ERROR;
         break;
@@ -473,7 +471,7 @@ void cmComputeTargetDepends::ComputeIntermediateGraph()
     } else {
       if (cmValue optimizeDependencies =
             gt->GetProperty("OPTIMIZE_DEPENDENCIES")) {
-        if (cmIsOn(optimizeDependencies)) {
+        if (optimizeDependencies.IsOn()) {
           this->OptimizeLinkDependencies(gt, intermediateEdges, initialEdges);
         } else {
           intermediateEdges = initialEdges;

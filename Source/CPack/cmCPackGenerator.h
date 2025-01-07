@@ -9,6 +9,9 @@
 #include <string>
 #include <vector>
 
+#include <cm/optional>
+#include <cm/string_view>
+
 #include "cm_sys_stat.h"
 
 #include "cmCPackComponentGroup.h"
@@ -16,6 +19,7 @@
 #include "cmValue.h"
 
 class cmCPackLog;
+class cmCryptoHash;
 class cmGlobalGenerator;
 class cmInstalledFile;
 class cmMakefile;
@@ -99,6 +103,7 @@ public:
   cmValue GetOption(const std::string& op) const;
   std::vector<std::string> GetOptions() const;
   bool IsSet(const std::string& name) const;
+  cmValue GetOptionIfSet(const std::string& name) const;
   bool IsOn(const std::string& name) const;
   bool IsSetToOff(const std::string& op) const;
   bool IsSetToEmpty(const std::string& op) const;
@@ -141,6 +146,18 @@ protected:
   virtual int PrepareGroupingKind();
 
   /**
+   * Ensures that the given name only contains characters that can cleanly be
+   * used as directory or file name and returns this sanitized name. Possibly,
+   * this name might be replaced by its hash.
+   * @param[in] name the name for a directory or file that shall be sanitized.
+   * @param[in] isFullName true if the result is used as the full name for a
+   *            directory or file. (Defaults to true.)
+   * @return the sanitized name.
+   */
+  virtual std::string GetSanitizedDirOrFileName(const std::string& name,
+                                                bool isFullName = true) const;
+
+  /**
    * Some CPack generators may prefer to have
    * CPack install all components belonging to the same
    * [component] group to be install in the same directory.
@@ -149,6 +166,16 @@ protected:
    * @param[in] componentName the name of the component to be installed
    * @return the name suffix the generator wants for the specified component
    *         default is "componentName"
+   */
+  virtual std::string GetComponentInstallSuffix(
+    const std::string& componentName);
+
+  /**
+   * The value that GetComponentInstallSuffix returns, but sanitized.
+   * @param[in] componentName the name of the component to be installed
+   * @return the name suffix the generator wants for the specified component
+   *         (but sanitized, so that it can be used on the file-system).
+   *         default is "componentName".
    */
   virtual std::string GetComponentInstallDirNameSuffix(
     const std::string& componentName);
@@ -179,7 +206,13 @@ protected:
   virtual const char* GetInstallPath();
   virtual const char* GetPackagingInstallPrefix();
 
-  virtual std::string FindTemplate(const char* name);
+  bool GenerateChecksumFile(cmCryptoHash& crypto,
+                            cm::string_view filename) const;
+  bool CopyPackageFile(const std::string& srcFilePath,
+                       cm::string_view filename) const;
+
+  std::string FindTemplate(cm::string_view name,
+                           cm::optional<cm::string_view> alt = cm::nullopt);
   virtual bool ConfigureFile(const std::string& inName,
                              const std::string& outName,
                              bool copyOnly = false);

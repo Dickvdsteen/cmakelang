@@ -68,6 +68,7 @@ target_link_libraries(imp_testExe1
   exp_testLib7
   exp_testLibCycleA
   exp_testLibPerConfigDest
+  exp_testSharedObjectAIX
   exp_testStaticLibWithPlugin
   )
 
@@ -123,6 +124,7 @@ target_link_libraries(imp_testExe1b
   bld_testLib7
   bld_testLibCycleA
   bld_testLibPerConfigDest
+  bld_testSharedObjectAIX
   bld_testStaticLibWithPlugin
   )
 
@@ -327,6 +329,16 @@ foreach(vis Pub Priv Iface)
     message(FATAL_ERROR "bld_testLib9Obj${vis} type is '${type}', not '${bld_objlib_type}'")
   endif()
 endforeach()
+
+# Create executables to verify custom transitive properties.
+add_executable(imp_testLib10 imp_testLib10.c)
+target_link_libraries(imp_testLib10 PRIVATE exp_testLib10)
+add_executable(imp_testLib10b imp_testLib10.c)
+target_link_libraries(imp_testLib10b PRIVATE bld_testLib10)
+add_executable(imp_testLib11 imp_testLib11.c)
+target_link_libraries(imp_testLib11 PRIVATE exp_testLib11)
+add_executable(imp_testLib11b imp_testLib11.c)
+target_link_libraries(imp_testLib11b PRIVATE bld_testLib11)
 
 #-----------------------------------------------------------------------------
 # Test that handling imported targets, including transitive dependencies,

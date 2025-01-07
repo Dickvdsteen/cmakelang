@@ -508,6 +508,8 @@ class Target
   Json::Value DumpLauncher(const char* name, const char* type);
   Json::Value DumpLaunchers();
 
+  Json::Value DumpDebugger();
+
 public:
   Target(cmGeneratorTarget* gt, std::string const& config);
   Json::Value Dump();
@@ -682,6 +684,11 @@ Json::Value CodemodelConfig::DumpTargets()
   for (cmGeneratorTarget* gt : targetList) {
     if (gt->GetType() == cmStateEnums::GLOBAL_TARGET ||
         !gt->IsInBuildSystem()) {
+      continue;
+    }
+
+    // Ignore targets starting with `__cmake_` as they are internal.
+    if (cmHasLiteralPrefix(gt->GetName(), "__cmake_")) {
       continue;
     }
 
@@ -1268,6 +1275,11 @@ Json::Value Target::Dump()
 
   target["backtraceGraph"] = this->Backtraces.Dump();
 
+  Json::Value debugger = this->DumpDebugger();
+  if (!debugger.isNull()) {
+    target["debugger"] = std::move(debugger);
+  }
+
   return target;
 }
 
@@ -1379,14 +1391,11 @@ CompileData Target::BuildCompileData(cmSourceFile* sf)
   }
 
   // Add precompile headers compile options.
-  std::vector<std::string> architectures =
-    this->GT->GetAppleArchs(this->Config, fd.Language);
-  if (architectures.empty()) {
-    architectures.emplace_back();
-  }
+  std::vector<std::string> pchArchs =
+    this->GT->GetPchArchs(this->Config, fd.Language);
 
   std::unordered_map<std::string, std::string> pchSources;
-  for (const std::string& arch : architectures) {
+  for (const std::string& arch : pchArchs) {
     const std::string pchSource =
       this->GT->GetPchSource(this->Config, fd.Language, arch);
     if (!pchSource.empty()) {
@@ -2130,6 +2139,19 @@ Json::Value Target::DumpLaunchers()
   }
   return launchers;
 }
+}
+
+Json::Value Target::DumpDebugger()
+{
+  Json::Value debuggerInformation;
+  if (cmValue debuggerWorkingDirectory =
+        this->GT->GetGlobalGenerator()->GetDebuggerWorkingDirectory(
+          this->GT)) {
+    debuggerInformation = Json::objectValue;
+    debuggerInformation["workingDirectory"] = *debuggerWorkingDirectory;
+  }
+
+  return debuggerInformation;
 }
 
 Json::Value cmFileAPICodemodelDump(cmFileAPI& fileAPI, unsigned long version)

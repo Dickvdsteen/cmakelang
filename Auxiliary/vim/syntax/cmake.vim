@@ -155,6 +155,7 @@ syn keyword cmakeProperty contained
             \ C_STANDARD_REQUIRED
             \ DEBUG_CONFIGURATIONS
             \ DEBUG_POSTFIX
+            \ DEBUGGER_WORKING_DIRECTORY
             \ DEFINE_SYMBOL
             \ DEFINITIONS
             \ DEPENDS
@@ -416,6 +417,7 @@ syn keyword cmakeProperty contained
             \ VS_DOTNET_STARTUP_OBJECT
             \ VS_DOTNET_TARGET_FRAMEWORK_VERSION
             \ VS_DPI_AWARE
+            \ VS_FRAMEWORK_REFERENCES
             \ VS_GLOBAL_KEYWORD
             \ VS_GLOBAL_PROJECT_TYPES
             \ VS_GLOBAL_ROOTNAMESPACE
@@ -450,6 +452,7 @@ syn keyword cmakeProperty contained
             \ VS_STARTUP_PROJECT
             \ VS_TOOL_OVERRIDE
             \ VS_USER_PROPS
+            \ VS_FILTER_PROPS
             \ VS_WINDOWS_TARGET_PLATFORM_MIN_VERSION
             \ VS_WINRT_COMPONENT
             \ VS_WINRT_EXTENSIONS
@@ -480,13 +483,13 @@ syn keyword cmakeProperty contained
             \ XCODE_SCHEME_DYNAMIC_LIBRARY_LOADS
             \ XCODE_SCHEME_DYNAMIC_LINKER_API_USAGE
             \ XCODE_SCHEME_ENABLE_GPU_API_VALIDATION
-            \ XCODE_SCHEME_ENABLE_GPU_FRAME_CAPTURE_MODE
             \ XCODE_SCHEME_ENABLE_GPU_SHADER_VALIDATION
             \ XCODE_SCHEME_ENVIRONMENT
             \ XCODE_SCHEME_EXECUTABLE
             \ XCODE_SCHEME_GUARD_MALLOC
             \ XCODE_SCHEME_LAUNCH_CONFIGURATION
             \ XCODE_SCHEME_LAUNCH_MODE
+            \ XCODE_SCHEME_LLDB_INIT_FILE
             \ XCODE_SCHEME_MAIN_THREAD_CHECKER_STOP
             \ XCODE_SCHEME_MALLOC_GUARD_EDGES
             \ XCODE_SCHEME_MALLOC_SCRIBBLE
@@ -1138,6 +1141,7 @@ syn keyword cmakeVariable contained
             \ CMAKE_C_VISIBILITY_PRESET
             \ CMAKE_DEBUG_POSTFIX
             \ CMAKE_DEBUG_TARGET_PROPERTIES
+            \ CMAKE_DEBUGGER_WORKING_DIRECTORY
             \ CMAKE_DEFAULT_BUILD_TYPE
             \ CMAKE_DEFAULT_CONFIGS
             \ CMAKE_DEPENDS_IN_PROJECT_ONLY
@@ -1846,12 +1850,12 @@ syn keyword cmakeVariable contained
             \ CMAKE_XCODE_SCHEME_DYNAMIC_LIBRARY_LOADS
             \ CMAKE_XCODE_SCHEME_DYNAMIC_LINKER_API_USAGE
             \ CMAKE_XCODE_SCHEME_ENABLE_GPU_API_VALIDATION
-            \ CMAKE_XCODE_SCHEME_ENABLE_GPU_FRAME_CAPTURE_MODE
             \ CMAKE_XCODE_SCHEME_ENABLE_GPU_SHADER_VALIDATION
             \ CMAKE_XCODE_SCHEME_ENVIRONMENT
             \ CMAKE_XCODE_SCHEME_GUARD_MALLOC
             \ CMAKE_XCODE_SCHEME_LAUNCH_CONFIGURATION
             \ CMAKE_XCODE_SCHEME_LAUNCH_MODE
+            \ CMAKE_XCODE_SCHEME_LLDB_INIT_FILE
             \ CMAKE_XCODE_SCHEME_MAIN_THREAD_CHECKER_STOP
             \ CMAKE_XCODE_SCHEME_MALLOC_GUARD_EDGES
             \ CMAKE_XCODE_SCHEME_MALLOC_SCRIBBLE
@@ -2635,7 +2639,6 @@ syn keyword cmakeKWadd_test contained
             \ SKIP_REGULAR_EXPRESSION
             \ TARGET_FILE
             \ WILL_FAIL
-            \ WILL_FALL
             \ WORKING_DIRECTORY
 
 syn keyword cmakeKWblock contained

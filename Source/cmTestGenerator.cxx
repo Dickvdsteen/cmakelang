@@ -49,8 +49,6 @@ bool needToQuoteTestName(const cmMakefile& mf, const std::string& name)
     case cmPolicies::OLD:
       // OLD behavior is to not quote the test's name.
       return false;
-    case cmPolicies::REQUIRED_IF_USED:
-    case cmPolicies::REQUIRED_ALWAYS:
     case cmPolicies::NEW:
     default:
       // NEW behavior is to quote the test's name.
@@ -174,15 +172,36 @@ void cmTestGenerator::GenerateScriptForConfig(std::ostream& os,
       if (!cmNonempty(launcher)) {
         return;
       }
-      cmList launcherWithArgs{ ge.Parse(*launcher)->Evaluate(this->LG,
-                                                             config) };
+      const auto propVal = ge.Parse(*launcher)->Evaluate(this->LG, config);
+      cmList launcherWithArgs(propVal, cmList::ExpandElements::Yes,
+                              this->Test->GetCMP0178() == cmPolicies::NEW
+                                ? cmList::EmptyElements::Yes
+                                : cmList::EmptyElements::No);
       if (!launcherWithArgs.empty() && !launcherWithArgs[0].empty()) {
+        if (this->Test->GetCMP0178() == cmPolicies::WARN) {
+          cmList argsWithEmptyValuesPreserved(
+            propVal, cmList::ExpandElements::Yes, cmList::EmptyElements::Yes);
+          if (launcherWithArgs != argsWithEmptyValuesPreserved) {
+            this->Test->GetMakefile()->IssueMessage(
+              MessageType::AUTHOR_WARNING,
+              cmStrCat("The ", propertyName, " property of target '",
+                       target->GetName(),
+                       "' contains empty list items. Those empty items are "
+                       "being silently discarded to preserve backward "
+                       "compatibility.\n",
+                       cmPolicies::GetPolicyWarning(cmPolicies::CMP0178)));
+          }
+        }
         std::string launcherExe(launcherWithArgs[0]);
         cmSystemTools::ConvertToUnixSlashes(launcherExe);
         os << cmOutputConverter::EscapeForCMake(launcherExe) << " ";
         for (std::string const& arg :
              cmMakeRange(launcherWithArgs).advance(1)) {
-          os << cmOutputConverter::EscapeForCMake(arg) << " ";
+          if (arg.empty()) {
+            os << "\"\" ";
+          } else {
+            os << cmOutputConverter::EscapeForCMake(arg) << " ";
+          }
         }
       }
     };

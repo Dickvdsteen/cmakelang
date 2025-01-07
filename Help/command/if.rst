@@ -41,13 +41,15 @@ Compound conditions are evaluated in the following order of precedence:
 
 1. `Parentheses`_.
 
-2. Unary tests such as `EXISTS`_, `COMMAND`_, and `DEFINED`_.
+2. Unary tests such as `COMMAND`_, `POLICY`_, `TARGET`_, `TEST`_,
+   `EXISTS`_, `IS_READABLE`_, `IS_WRITABLE`_, `IS_EXECUTABLE`_,
+   `IS_DIRECTORY`_, `IS_SYMLINK`_, `IS_ABSOLUTE`_, and `DEFINED`_.
 
 3. Binary tests such as `EQUAL`_, `LESS`_, `LESS_EQUAL`_, `GREATER`_,
    `GREATER_EQUAL`_, `STREQUAL`_, `STRLESS`_, `STRLESS_EQUAL`_,
    `STRGREATER`_, `STRGREATER_EQUAL`_, `VERSION_EQUAL`_, `VERSION_LESS`_,
    `VERSION_LESS_EQUAL`_, `VERSION_GREATER`_, `VERSION_GREATER_EQUAL`_,
-   `PATH_EQUAL`_, and `MATCHES`_.
+   `PATH_EQUAL`_, `IN_LIST`_, `IS_NEWER_THAN`_, and `MATCHES`_.
 
 4. Unary logical operator `NOT`_.
 
@@ -180,7 +182,7 @@ File Operations
 
   .. note::
     Prefer ``if(IS_READABLE)`` to check file readability.  ``if(EXISTS)``
-    may be changed in the future to to only check file existence.
+    may be changed in the future to only check file existence.
 
 .. signature:: if(IS_READABLE <path-to-file-or-directory>)
 
@@ -388,11 +390,13 @@ Path Comparisons
 
   .. versionadded:: 3.24
 
-  Compares the two paths component-by-component.  Only if every component of
-  both paths match will the two paths compare equal.  Multiple path separators
-  are effectively collapsed into a single separator, but note that backslashes
-  are not converted to forward slashes.  No other
-  :ref:`path normalization <Normalization>` is performed.
+  Lexicographically compares two CMake paths component-by-component without
+  accessing the filesystem. Only if every component of both paths match will
+  the two paths compare equal.  Multiple path separators are effectively
+  collapsed into a single separator, but note that backslashes are not
+  converted to forward slashes.
+  No other :ref:`path normalization <Normalization>` is performed.
+  Trailing slashes are preserved, thus ``/a/b`` and ``/a/b/`` are not equal.
 
   Component-wise comparison is superior to string-based comparison due to the
   handling of multiple path separators.  In the following example, the
@@ -470,6 +474,10 @@ above-documented condition syntax accepts ``<variable|string>``:
   `VERSION_GREATER_EQUAL`_ are independently tested to see if they are defined
   variables.  If so, their defined values are used otherwise the original value
   is used.
+
+* The left hand argument to `IN_LIST`_ is tested to see if it is a defined
+  variable.  If so, the variable's value is used, otherwise the original
+  value is used.
 
 * The right hand argument to `NOT`_ is tested to see if it is a boolean
   constant.  If so, the value is used, otherwise it is assumed to be a

@@ -11,13 +11,14 @@
 #include <utility>
 #include <vector>
 
+#include <cm/string_view>
+
 #include "cmListFileCache.h"
 #include "cmLocalGenerator.h"
 
 class cmake;
 class cmCompiledGeneratorExpression;
 class cmGeneratorTarget;
-struct cmGeneratorExpressionContext;
 struct cmGeneratorExpressionDAGChecker;
 struct cmGeneratorExpressionEvaluator;
 
@@ -60,24 +61,24 @@ public:
 
   static std::string Preprocess(const std::string& input,
                                 PreprocessContext context,
-                                bool resolveRelative = false);
+                                cm::string_view importPrefix = {});
 
   static void Split(const std::string& input,
                     std::vector<std::string>& output);
 
-  static std::string::size_type Find(const std::string& input);
+  static cm::string_view::size_type Find(const cm::string_view& input);
 
   static bool IsValidTargetName(const std::string& input);
 
   static std::string StripEmptyListElements(const std::string& input);
 
-  static inline bool StartsWithGeneratorExpression(const std::string& input)
+  static bool StartsWithGeneratorExpression(const std::string& input)
   {
     return input.length() >= 2 && input[0] == '$' && input[1] == '<';
   }
-  static inline bool StartsWithGeneratorExpression(const char* input)
+  static bool StartsWithGeneratorExpression(const char* input)
   {
-    return input != nullptr && input[0] == '$' && input[1] == '<';
+    return input && input[0] == '$' && input[1] == '<';
   }
 
   static void ReplaceInstallPrefix(std::string& input,
@@ -151,10 +152,6 @@ public:
                               std::map<std::string, std::string>& mapping);
 
 private:
-  const std::string& EvaluateWithContext(
-    cmGeneratorExpressionContext& context,
-    cmGeneratorExpressionDAGChecker* dagChecker) const;
-
   cmCompiledGeneratorExpression(cmake& cmakeInstance,
                                 cmListFileBacktrace backtrace,
                                 std::string input);

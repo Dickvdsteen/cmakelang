@@ -15,6 +15,7 @@
 #include "cmCustomCommand.h"
 #include "cmCustomCommandGenerator.h"
 #include "cmGeneratedFileStream.h"
+#include "cmGeneratorOptions.h"
 #include "cmGeneratorTarget.h"
 #include "cmGlobalGhsMultiGenerator.h"
 #include "cmLinkLineComputer.h" // IWYU pragma: keep
@@ -593,7 +594,7 @@ void cmGhsMultiTargetGenerator::WriteSources(std::ostream& fout_proj)
   for (auto& sg : groupFilesList) {
     std::ostream* fout;
     bool useProjectFile =
-      cmIsOn(this->GeneratorTarget->GetProperty("GHS_NO_SOURCE_GROUP_FILE")) ||
+      this->GeneratorTarget->GetProperty("GHS_NO_SOURCE_GROUP_FILE").IsOn() ||
       this->Makefile->IsOn("CMAKE_GHS_NO_SOURCE_GROUP_FILE");
     if (useProjectFile || sg.empty()) {
       fout = &fout_proj;
@@ -764,7 +765,7 @@ std::string cmGhsMultiTargetGenerator::WriteObjectLangOverride(
 bool cmGhsMultiTargetGenerator::DetermineIfIntegrityApp()
 {
   if (cmValue p = this->GeneratorTarget->GetProperty("ghs_integrity_app")) {
-    return cmIsOn(*p);
+    return p.IsOn();
   }
   std::vector<cmSourceFile*> sources;
   this->GeneratorTarget->GetSourceFiles(sources, this->ConfigName);

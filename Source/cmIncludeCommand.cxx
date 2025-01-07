@@ -20,8 +20,10 @@ bool cmIncludeCommand(std::vector<std::string> const& args,
 {
   static std::map<std::string, cmPolicies::PolicyID> DeprecatedModules;
   if (DeprecatedModules.empty()) {
+    DeprecatedModules["CMakeFindFrameworks"] = cmPolicies::CMP0173;
     DeprecatedModules["Dart"] = cmPolicies::CMP0145;
     DeprecatedModules["Documentation"] = cmPolicies::CMP0106;
+    DeprecatedModules["FindBoost"] = cmPolicies::CMP0167;
     DeprecatedModules["FindCUDA"] = cmPolicies::CMP0146;
     DeprecatedModules["FindDart"] = cmPolicies::CMP0145;
     DeprecatedModules["FindPythonInterp"] = cmPolicies::CMP0148;
@@ -98,8 +100,6 @@ bool cmIncludeCommand(std::vector<std::string> const& args,
           }
           case cmPolicies::OLD:
             break;
-          case cmPolicies::REQUIRED_IF_USED:
-          case cmPolicies::REQUIRED_ALWAYS:
           case cmPolicies::NEW:
             mfile = "";
             break;
@@ -128,8 +128,6 @@ bool cmIncludeCommand(std::vector<std::string> const& args,
         CM_FALLTHROUGH;
       case cmPolicies::OLD:
         break;
-      case cmPolicies::REQUIRED_IF_USED:
-      case cmPolicies::REQUIRED_ALWAYS:
       case cmPolicies::NEW:
         modal = "may";
         messageType = MessageType::FATAL_ERROR;

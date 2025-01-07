@@ -70,7 +70,7 @@ public:
   {
   }
 
-  inline void Notify()
+  void Notify()
   {
     std::unique_lock<std::mutex> lock(Mutex);
     Count++;
@@ -78,7 +78,7 @@ public:
     Cv.notify_one();
   }
 
-  inline void Wait()
+  void Wait()
   {
     std::unique_lock<std::mutex> lock(Mutex);
     while (Count == 0) {
@@ -148,6 +148,7 @@ cmDebuggerAdapter::cmDebuggerAdapter(
     SupportsVariableType = req.supportsVariableType.value(false);
     dap::CMakeInitializeResponse response;
     response.supportsConfigurationDoneRequest = true;
+    response.supportsValueFormattingOptions = true;
     response.cmakeVersion.major = CMake_VERSION_MAJOR;
     response.cmakeVersion.minor = CMake_VERSION_MINOR;
     response.cmakeVersion.patch = CMake_VERSION_PATCH;
@@ -186,7 +187,7 @@ cmDebuggerAdapter::cmDebuggerAdapter(
     std::unique_lock<std::mutex> lock(Mutex);
 
     cm::optional<dap::StackTraceResponse> response =
-      ThreadManager->GetThreadStackTraceResponse(request.threadId);
+      ThreadManager->GetThreadStackTraceResponse(request);
     if (response.has_value()) {
       return response.value();
     }

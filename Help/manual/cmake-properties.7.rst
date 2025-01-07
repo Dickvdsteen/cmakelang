@@ -25,6 +25,7 @@ Properties of Global Scope
    /prop_gbl/CMAKE_C_KNOWN_FEATURES
    /prop_gbl/CMAKE_CUDA_KNOWN_FEATURES
    /prop_gbl/CMAKE_CXX_KNOWN_FEATURES
+   /prop_gbl/CMAKE_HIP_KNOWN_FEATURES
    /prop_gbl/CMAKE_ROLE
    /prop_gbl/DEBUG_CONFIGURATIONS
    /prop_gbl/DISABLED_FEATURES
@@ -39,11 +40,13 @@ Properties of Global Scope
    /prop_gbl/GENERATOR_IS_MULTI_CONFIG
    /prop_gbl/GLOBAL_DEPENDS_DEBUG_MODE
    /prop_gbl/GLOBAL_DEPENDS_NO_CYCLES
+   /prop_gbl/INSTALL_PARALLEL
    /prop_gbl/IN_TRY_COMPILE
    /prop_gbl/JOB_POOLS
    /prop_gbl/PACKAGES_FOUND
    /prop_gbl/PACKAGES_NOT_FOUND
    /prop_gbl/PREDEFINED_TARGETS_FOLDER
+   /prop_gbl/PROPAGATE_TOP_LEVEL_INCLUDES_TO_TRY_COMPILE
    /prop_gbl/REPORT_UNDEFINED_PROPERTIES
    /prop_gbl/RULE_LAUNCH_COMPILE
    /prop_gbl/RULE_LAUNCH_CUSTOM
@@ -94,6 +97,7 @@ Properties on Directories
    /prop_dir/VARIABLES
    /prop_dir/VS_GLOBAL_SECTION_POST_section
    /prop_dir/VS_GLOBAL_SECTION_PRE_section
+   /prop_dir/VS_SOLUTION_ITEMS
    /prop_dir/VS_STARTUP_PROJECT
 
 .. _`Target Properties`:
@@ -106,6 +110,7 @@ Properties on Targets
 
    /prop_tgt/ADDITIONAL_CLEAN_FILES
    /prop_tgt/AIX_EXPORT_ALL_SYMBOLS
+   /prop_tgt/AIX_SHARED_LIBRARY_ARCHIVE
    /prop_tgt/ALIAS_GLOBAL
    /prop_tgt/ALIASED_TARGET
    /prop_tgt/ANDROID_ANT_ADDITIONAL_OPTIONS
@@ -194,10 +199,12 @@ Properties on Targets
    /prop_tgt/CXX_MODULE_SET
    /prop_tgt/CXX_MODULE_SET_NAME
    /prop_tgt/CXX_MODULE_SETS
+   /prop_tgt/CXX_MODULE_STD
    /prop_tgt/CXX_SCAN_FOR_MODULES
    /prop_tgt/CXX_STANDARD
    /prop_tgt/CXX_STANDARD_REQUIRED
    /prop_tgt/DEBUG_POSTFIX
+   /prop_tgt/DEBUGGER_WORKING_DIRECTORY
    /prop_tgt/DEFINE_SYMBOL
    /prop_tgt/DEPLOYMENT_ADDITIONAL_FILES
    /prop_tgt/DEPLOYMENT_REMOTE_DIRECTORY
@@ -212,6 +219,7 @@ Properties on Targets
    /prop_tgt/EXCLUDE_FROM_ALL
    /prop_tgt/EXCLUDE_FROM_DEFAULT_BUILD
    /prop_tgt/EXCLUDE_FROM_DEFAULT_BUILD_CONFIG
+   /prop_tgt/EXPORT_BUILD_DATABASE
    /prop_tgt/EXPORT_COMPILE_COMMANDS
    /prop_tgt/EXPORT_FIND_PACKAGE_NAME
    /prop_tgt/EXPORT_NAME
@@ -330,11 +338,13 @@ Properties on Targets
    /prop_tgt/LINK_INTERFACE_MULTIPLICITY_CONFIG
    /prop_tgt/LINK_LIBRARIES
    /prop_tgt/LINK_LIBRARIES_ONLY_TARGETS
+   /prop_tgt/LINK_LIBRARIES_STRATEGY
    /prop_tgt/LINK_LIBRARY_OVERRIDE
    /prop_tgt/LINK_LIBRARY_OVERRIDE_LIBRARY
    /prop_tgt/LINK_OPTIONS
    /prop_tgt/LINK_SEARCH_END_STATIC
    /prop_tgt/LINK_SEARCH_START_STATIC
+   /prop_tgt/LINK_WARNING_AS_ERROR
    /prop_tgt/LINK_WHAT_YOU_USE
    /prop_tgt/LINKER_LANGUAGE
    /prop_tgt/LINKER_TYPE
@@ -400,12 +410,15 @@ Properties on Targets
    /prop_tgt/Swift_MODULE_NAME
    /prop_tgt/SYSTEM
    /prop_tgt/TEST_LAUNCHER
+   /prop_tgt/TRANSITIVE_COMPILE_PROPERTIES
+   /prop_tgt/TRANSITIVE_LINK_PROPERTIES
    /prop_tgt/TYPE
    /prop_tgt/UNITY_BUILD
    /prop_tgt/UNITY_BUILD_BATCH_SIZE
    /prop_tgt/UNITY_BUILD_CODE_AFTER_INCLUDE
    /prop_tgt/UNITY_BUILD_CODE_BEFORE_INCLUDE
    /prop_tgt/UNITY_BUILD_MODE
+   /prop_tgt/UNITY_BUILD_RELOCATABLE
    /prop_tgt/UNITY_BUILD_UNIQUE_ID
    /prop_tgt/VERIFY_INTERFACE_HEADER_SETS
    /prop_tgt/VERSION
@@ -424,6 +437,7 @@ Properties on Targets
    /prop_tgt/VS_DOTNET_STARTUP_OBJECT
    /prop_tgt/VS_DOTNET_TARGET_FRAMEWORK_VERSION
    /prop_tgt/VS_DPI_AWARE
+   /prop_tgt/VS_FRAMEWORK_REFERENCES
    /prop_tgt/VS_GLOBAL_KEYWORD
    /prop_tgt/VS_GLOBAL_PROJECT_TYPES
    /prop_tgt/VS_GLOBAL_ROOTNAMESPACE
@@ -445,7 +459,9 @@ Properties on Targets
    /prop_tgt/VS_SDK_REFERENCES
    /prop_tgt/VS_SOLUTION_DEPLOY
    /prop_tgt/VS_SOURCE_SETTINGS_tool
+   /prop_tgt/VS_USE_DEBUG_LIBRARIES
    /prop_tgt/VS_USER_PROPS
+   /prop_tgt/VS_FILTER_PROPS
    /prop_tgt/VS_WINDOWS_TARGET_PLATFORM_MIN_VERSION
    /prop_tgt/VS_WINRT_COMPONENT
    /prop_tgt/VS_WINRT_REFERENCES
@@ -479,6 +495,7 @@ Properties on Targets
    /prop_tgt/XCODE_SCHEME_GUARD_MALLOC
    /prop_tgt/XCODE_SCHEME_LAUNCH_CONFIGURATION
    /prop_tgt/XCODE_SCHEME_LAUNCH_MODE
+   /prop_tgt/XCODE_SCHEME_LLDB_INIT_FILE
    /prop_tgt/XCODE_SCHEME_MAIN_THREAD_CHECKER_STOP
    /prop_tgt/XCODE_SCHEME_MALLOC_GUARD_EDGES
    /prop_tgt/XCODE_SCHEME_MALLOC_SCRIBBLE
@@ -571,6 +588,7 @@ Properties on Source Files
    /prop_sf/UNITY_GROUP
    /prop_sf/VS_COPY_TO_OUT_DIR
    /prop_sf/VS_CSHARP_tagname
+   /prop_sf/VS_CUSTOM_COMMAND_DISABLE_PARALLEL_BUILD
    /prop_sf/VS_DEPLOYMENT_CONTENT
    /prop_sf/VS_DEPLOYMENT_LOCATION
    /prop_sf/VS_INCLUDE_IN_VSIX

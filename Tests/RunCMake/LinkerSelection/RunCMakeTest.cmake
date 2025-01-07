@@ -1,11 +1,7 @@
 include(RunCMake)
 
-if (RunCMake_GENERATOR MATCHES "Visual Studio 9 2008")
-  run_cmake(UnsupportedLinkerType)
-  return()
-endif()
-
-run_cmake(InvalidLinkerType)
+run_cmake(InvalidLinkerType1)
+run_cmake(InvalidLinkerType2)
 
 # look-up for LLVM linker
 if (WIN32)
@@ -16,14 +12,14 @@ endif()
 find_program(LLD_LINKER NAMES ${LINKER_NAMES})
 
 macro(run_cmake_and_build test)
-  run_cmake_with_options(${test} -DCMake_TEST_CUDA=${CMake_TEST_CUDA})
+  run_cmake_with_options(${test}
+    -DCMake_TEST_CUDA=${CMake_TEST_CUDA}
+    -DCMake_TEST_Swift=${CMake_TEST_Swift})
   set(RunCMake_TEST_BINARY_DIR ${RunCMake_BINARY_DIR}/${test}-build)
   set(RunCMake_TEST_NO_CLEAN 1)
-  if(CMake_TEST_CUDA)
-    string(APPEND "|${CMAKE_CUDA_USING_LINKER_LLD}")
-  endif()
+  set(RunCMake_TEST_OUTPUT_MERGE 1)
   run_cmake_command(${test}-build ${CMAKE_COMMAND} --build . --config Release --verbose ${ARGN})
-
+  unset(RunCMake_TEST_OUTPUT_MERGE)
   unset(RunCMake_TEST_BINARY_DIR)
   unset(RunCMake_TEST_NO_CLEAN)
 endmacro()
@@ -33,6 +29,7 @@ if(LLD_LINKER)
     set(CMAKE_VERBOSE_MAKEFILE TRUE)
     set(CMAKE_C_USE_RESPONSE_FILE_FOR_LIBRARIES FALSE)
     set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_LIBRARIES FALSE)
+    set(CMAKE_Swift_USE_RESPONSE_FILE_FOR_LIBRARIES FALSE)
 
     run_cmake_and_build(ValidLinkerType)
     run_cmake_and_build(CustomLinkerType)

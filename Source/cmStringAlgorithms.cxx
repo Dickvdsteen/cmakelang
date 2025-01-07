@@ -7,7 +7,16 @@
 #include <cstddef> // IWYU pragma: keep
 #include <cstdio>
 #include <cstdlib>
-#include <iterator>
+
+bool cmStrCaseEq(cm::string_view s1, cm::string_view s2)
+{
+  if (s1.size() != s2.size()) {
+    return false;
+  }
+
+  return std::equal(s1.begin(), s1.end(), s2.begin(),
+                    [](char a, char b) { return tolower(a) == tolower(b); });
+}
 
 std::string cmTrimWhitespace(cm::string_view str)
 {
@@ -54,30 +63,6 @@ std::string cmEscapeQuotes(cm::string_view str)
     result += ch;
   }
   return result;
-}
-
-std::vector<std::string> cmTokenize(cm::string_view str, cm::string_view sep)
-{
-  std::vector<std::string> tokens;
-  cm::string_view::size_type tokend = 0;
-
-  do {
-    cm::string_view::size_type tokstart = str.find_first_not_of(sep, tokend);
-    if (tokstart == cm::string_view::npos) {
-      break; // no more tokens
-    }
-    tokend = str.find_first_of(sep, tokstart);
-    if (tokend == cm::string_view::npos) {
-      tokens.emplace_back(str.substr(tokstart));
-    } else {
-      tokens.emplace_back(str.substr(tokstart, tokend - tokstart));
-    }
-  } while (tokend != cm::string_view::npos);
-
-  if (tokens.empty()) {
-    tokens.emplace_back();
-  }
-  return tokens;
 }
 
 namespace {
@@ -239,51 +224,14 @@ bool cmStrToULongLong(std::string const& str, unsigned long long* value)
   return cmStrToULongLong(str.c_str(), value);
 }
 
-template <typename Range>
-std::size_t getJoinedLength(Range const& rng, cm::string_view separator)
-{
-  std::size_t rangeLength{};
-  for (auto const& item : rng) {
-    rangeLength += item.size();
-  }
-
-  auto const separatorsLength = (rng.size() - 1) * separator.size();
-
-  return rangeLength + separatorsLength;
-}
-
-template <typename Range>
-std::string cmJoinImpl(Range const& rng, cm::string_view separator,
-                       cm::string_view initial)
-{
-  if (rng.empty()) {
-    return { std::begin(initial), std::end(initial) };
-  }
-
-  std::string result;
-  result.reserve(initial.size() + getJoinedLength(rng, separator));
-  result.append(std::begin(initial), std::end(initial));
-
-  auto begin = std::begin(rng);
-  auto end = std::end(rng);
-  result += *begin;
-
-  for (++begin; begin != end; ++begin) {
-    result.append(std::begin(separator), std::end(separator));
-    result += *begin;
-  }
-
-  return result;
-}
-
 std::string cmJoin(std::vector<std::string> const& rng,
                    cm::string_view separator, cm::string_view initial)
 {
-  return cmJoinImpl(rng, separator, initial);
+  return cmJoinStrings(rng, separator, initial);
 }
 
 std::string cmJoin(cmStringRange const& rng, cm::string_view separator,
                    cm::string_view initial)
 {
-  return cmJoinImpl(rng, separator, initial);
+  return cmJoinStrings(rng, separator, initial);
 }

@@ -15,7 +15,6 @@
 #include "cmSystemTools.h"
 
 #include "CTest/cmCTestLaunch.h"
-#include "CTest/cmCTestScriptHandler.h"
 
 namespace {
 const cmDocumentationEntry cmDocumentationName = {
@@ -48,9 +47,9 @@ const cmDocumentationEntry cmDocumentationOptions[] = {
     "Truncate 'tail' (default), 'middle' or 'head' of test output once "
     "maximum output size is reached" },
   { "-F", "Enable failover." },
-  { "-j <jobs>, --parallel <jobs>",
-    "Run the tests in parallel using the "
-    "given number of jobs." },
+  { "-j [<level>], --parallel [<level>]",
+    "Run tests in parallel, "
+    "optionally limited to a given level of parallelism." },
   { "-Q,--quiet", "Make ctest quiet." },
   { "-O <file>, --output-log <file>", "Output to log file" },
   { "--output-junit <file>", "Output test results to JUnit XML file." },
@@ -147,8 +146,6 @@ const cmDocumentationEntry cmDocumentationOptions[] = {
   { "--overwrite", "Overwrite CTest configuration option." },
   { "--extra-submit <file>[;<file>]", "Submit extra files to the dashboard." },
   { "--http-header <header>", "Append HTTP header when submitting" },
-  { "--force-new-ctest-process",
-    "Run child CTest instances as new processes" },
   { "--schedule-random", "Use a random order for scheduling tests" },
   { "--submit-index",
     "Submit individual dashboard tests with specific index" },
@@ -177,7 +174,6 @@ int main(int argc, char const* const* argv)
   argc = encoding_args.argc();
   argv = encoding_args.argv();
 
-  cmSystemTools::DoNotInheritStdPipes();
   cmSystemTools::InitializeLibUV();
   cmSystemTools::FindCMakeResources(argv[0]);
 
@@ -186,11 +182,8 @@ int main(int argc, char const* const* argv)
     return cmCTestLaunch::Main(argc, argv);
   }
 
-  cmCTest inst;
-
-  if (cmSystemTools::GetCurrentWorkingDirectory().empty()) {
-    cmCTestLog(&inst, ERROR_MESSAGE,
-               "Current working directory cannot be established.\n");
+  if (cmSystemTools::GetLogicalWorkingDirectory().empty()) {
+    std::cerr << "Current working directory cannot be established.\n";
     return 1;
   }
 
@@ -201,18 +194,13 @@ int main(int argc, char const* const* argv)
       !(cmSystemTools::FileExists("CTestTestfile.cmake") ||
         cmSystemTools::FileExists("DartTestfile.txt"))) {
     if (argc == 1) {
-      cmCTestLog(&inst, ERROR_MESSAGE,
-                 "*********************************\n"
-                 "No test configuration file found!\n"
-                 "*********************************\n");
+      std::cerr << "*********************************\n"
+                   "No test configuration file found!\n"
+                   "*********************************\n";
     }
     cmDocumentation doc;
     doc.addCTestStandardDocSections();
     if (doc.CheckOptions(argc, argv)) {
-      // Construct and print requested documentation.
-      cmCTestScriptHandler* ch = inst.GetScriptHandler();
-      ch->CreateCMake();
-
       doc.SetShowGenerators(false);
       doc.SetName("ctest");
       doc.SetSection("Name", cmDocumentationName);
@@ -223,15 +211,8 @@ int main(int argc, char const* const* argv)
   }
 
   // copy the args to a vector
-  std::vector<std::string> args;
-  args.reserve(argc);
-  for (int i = 0; i < argc; ++i) {
-    args.emplace_back(argv[i]);
-  }
-  // run ctest
-  std::string output;
-  int res = inst.Run(args, &output);
-  cmCTestLog(&inst, OUTPUT, output);
+  auto args = std::vector<std::string>(argv, argv + argc);
 
-  return res;
+  // run ctest
+  return cmCTest{}.Run(args);
 }

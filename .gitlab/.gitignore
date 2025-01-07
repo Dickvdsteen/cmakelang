@@ -2,6 +2,7 @@
 /5.15.1-0-202009071110*
 /bcc*
 /cmake*
+/iar
 /intel
 /ispc*
 /innosetup
@@ -10,6 +11,7 @@
 /mingw
 /msvc*
 /ninja*
+/nuget
 /openmp
 /open-watcom*
 /orangec
@@ -18,8 +20,10 @@
 /sccache*
 /swift
 /ticlang
+/tmp
 /unstable-jom*
 /watcom
-/wix*
+/wix3
+/wix4
 /clang-tidy-fixes
 /num_warnings.txt

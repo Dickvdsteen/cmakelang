@@ -128,12 +128,13 @@ bool cmGlobalVisualStudio8Generator::ParseGeneratorPlatform(
 {
   this->GeneratorPlatform.clear();
 
-  std::vector<std::string> const fields = cmTokenize(p, ",");
-  auto fi = fields.begin();
-  if (fi == fields.end()) {
+  std::vector<std::string> const fields =
+    cmTokenize(p, ',', cmTokenizerMode::New);
+  if (fields.empty()) {
     return true;
   }
 
+  auto fi = fields.begin();
   // The first field may be the VS platform.
   if (fi->find('=') == fi->npos) {
     this->GeneratorPlatform = *fi;
@@ -223,11 +224,6 @@ cmGlobalVisualStudio8Generator::GetTargetFrameworkTargetsVersion() const
 std::string cmGlobalVisualStudio8Generator::GetGenerateStampList()
 {
   return "generate.stamp.list";
-}
-
-void cmGlobalVisualStudio8Generator::Configure()
-{
-  this->cmGlobalVisualStudio7Generator::Configure();
 }
 
 bool cmGlobalVisualStudio8Generator::UseFolderProperty() const
@@ -329,8 +325,11 @@ bool cmGlobalVisualStudio8Generator::AddCheckTarget()
     cmCustomCommandLines commandLines = cmMakeSingleCommandLine(
       { cmSystemTools::GetCMakeCommand(), argS, argB, "--check-stamp-list",
         stampList, "--vs-solution-file", sln });
-    if (cm->GetIgnoreWarningAsError()) {
+    if (cm->GetIgnoreCompileWarningAsError()) {
       commandLines[0].emplace_back("--compile-no-warning-as-error");
+    }
+    if (cm->GetIgnoreLinkWarningAsError()) {
+      commandLines[0].emplace_back("--link-no-warning-as-error");
     }
 
     // Add the rule.  Note that we cannot use the CMakeLists.txt

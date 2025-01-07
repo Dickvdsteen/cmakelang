@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 cmake_policy(SET CMP0031 OLD) # testing the old behavior
 project(LoadCommand)
 
@@ -50,4 +50,3 @@ endif ()
 if (TEST_DEF AND SOME_CACHE_VARIABLE AND TEST_EXEC)
   add_definitions(-DCMAKE_IS_FUN)
 endif ()
-

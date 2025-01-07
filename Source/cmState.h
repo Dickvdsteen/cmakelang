@@ -27,13 +27,13 @@
 #include "cmValue.h"
 
 class cmCacheManager;
-class cmCommand;
 class cmGlobVerificationManager;
 class cmMakefile;
 class cmStateSnapshot;
 class cmMessenger;
 class cmExecutionStatus;
 class cmListFileBacktrace;
+struct cmGlobCacheEntry;
 struct cmListFileArgument;
 
 template <typename T>
@@ -176,8 +176,6 @@ public:
   // Returns a command from its name, or nullptr
   Command GetCommandByExactName(std::string const& name) const;
 
-  void AddBuiltinCommand(std::string const& name,
-                         std::unique_ptr<cmCommand> command);
   void AddBuiltinCommand(std::string const& name, Command command);
   void AddBuiltinCommand(std::string const& name, BuiltinCommand command);
   void AddFlowControlCommand(std::string const& name, Command command);
@@ -212,6 +210,8 @@ public:
   bool UseWindowsVSIDE() const;
   void SetGhsMultiIDE(bool ghsMultiIDE);
   bool UseGhsMultiIDE() const;
+  void SetBorlandMake(bool borlandMake);
+  bool UseBorlandMake() const;
   void SetWatcomWMake(bool watcomWMake);
   bool UseWatcomWMake() const;
   void SetMinGWMake(bool minGWMake);
@@ -263,13 +263,11 @@ private:
   std::string const& GetGlobVerifyScript() const;
   std::string const& GetGlobVerifyStamp() const;
   bool SaveVerificationScript(const std::string& path, cmMessenger* messenger);
-  void AddGlobCacheEntry(bool recurse, bool listDirectories,
-                         bool followSymlinks, const std::string& relative,
-                         const std::string& expression,
-                         const std::vector<std::string>& files,
+  void AddGlobCacheEntry(const cmGlobCacheEntry& entry,
                          const std::string& variable,
                          cmListFileBacktrace const& bt,
                          cmMessenger* messenger);
+  std::vector<cmGlobCacheEntry> GetGlobCacheEntries() const;
 
   cmPropertyDefinitionMap PropertyDefinitions;
   std::vector<std::string> EnabledLanguages;
@@ -295,6 +293,7 @@ private:
   bool WindowsShell = false;
   bool WindowsVSIDE = false;
   bool GhsMultiIDE = false;
+  bool BorlandMake = false;
   bool WatcomWMake = false;
   bool MinGWMake = false;
   bool NMake = false;

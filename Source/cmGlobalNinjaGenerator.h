@@ -218,6 +218,10 @@ public:
   {
     return "install/strip";
   }
+  const char* GetInstallParallelTargetName() const
+  {
+    return "install/parallel";
+  }
   const char* GetTestTargetName() const override { return "test"; }
   const char* GetPackageTargetName() const override { return "package"; }
   const char* GetPackageSourceTargetName() const override
@@ -378,6 +382,7 @@ public:
   virtual void AddRebuildManifestOutputs(cmNinjaDeps& outputs) const
   {
     outputs.push_back(this->NinjaOutputPath(NINJA_BUILD_FILE));
+    this->AddCMakeFilesToRebuild(outputs);
   }
 
   int GetRuleCmdLength(const std::string& name)
@@ -461,7 +466,7 @@ public:
 
   std::set<std::string> GetCrossConfigs(const std::string& config) const;
 
-  const std::set<std::string>& GetDefaultConfigs() const
+  const std::set<std::string>& GetDefaultConfigs() const override
   {
     return this->DefaultConfigs;
   }
@@ -479,8 +484,13 @@ public:
   bool IsSingleConfigUtility(cmGeneratorTarget const* target) const;
 
   bool CheckCxxModuleSupport(CxxModuleSupportQuery query) override;
+  bool SupportsBuildDatabase() const override { return true; }
+
+  std::string ConvertToOutputPath(std::string path) const override;
 
 protected:
+  std::vector<std::string> const& GetConfigNames() const;
+
   void Generate() override;
 
   bool CheckALLOW_DUPLICATE_CUSTOM_TARGETS() const override { return true; }

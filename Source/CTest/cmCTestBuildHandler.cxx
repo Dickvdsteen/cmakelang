@@ -8,6 +8,7 @@
 #include <set>
 #include <utility>
 
+#include <cm/string_view>
 #include <cmext/algorithm>
 
 #include <cm3p/uv.h>
@@ -175,62 +176,10 @@ static cmCTestBuildCompileErrorWarningRex cmCTestWarningErrorFileLine[] = {
   { nullptr, 0, 0 }
 };
 
-cmCTestBuildHandler::cmCTestBuildHandler()
+cmCTestBuildHandler::cmCTestBuildHandler(cmCTest* ctest)
+  : Superclass(ctest)
+  , LastErrorOrWarning(this->ErrorsAndWarnings.end())
 {
-  this->MaxPreContext = 10;
-  this->MaxPostContext = 10;
-
-  this->MaxErrors = 50;
-  this->MaxWarnings = 50;
-
-  this->LastErrorOrWarning = this->ErrorsAndWarnings.end();
-
-  this->UseCTestLaunch = false;
-}
-
-void cmCTestBuildHandler::Initialize()
-{
-  this->Superclass::Initialize();
-  this->StartBuild.clear();
-  this->EndBuild.clear();
-  this->CustomErrorMatches.clear();
-  this->CustomErrorExceptions.clear();
-  this->CustomWarningMatches.clear();
-  this->CustomWarningExceptions.clear();
-  this->ReallyCustomWarningMatches.clear();
-  this->ReallyCustomWarningExceptions.clear();
-  this->ErrorWarningFileLineRegex.clear();
-
-  this->ErrorMatchRegex.clear();
-  this->ErrorExceptionRegex.clear();
-  this->WarningMatchRegex.clear();
-  this->WarningExceptionRegex.clear();
-  this->BuildProcessingQueue.clear();
-  this->BuildProcessingErrorQueue.clear();
-  this->BuildOutputLogSize = 0;
-  this->CurrentProcessingLine.clear();
-
-  this->SimplifySourceDir.clear();
-  this->SimplifyBuildDir.clear();
-  this->OutputLineCounter = 0;
-  this->ErrorsAndWarnings.clear();
-  this->LastErrorOrWarning = this->ErrorsAndWarnings.end();
-  this->PostContextCount = 0;
-  this->MaxPreContext = 10;
-  this->MaxPostContext = 10;
-  this->PreContext.clear();
-
-  this->TotalErrors = 0;
-  this->TotalWarnings = 0;
-  this->LastTickChar = 0;
-
-  this->ErrorQuotaReached = false;
-  this->WarningQuotaReached = false;
-
-  this->MaxErrors = 50;
-  this->MaxWarnings = 50;
-
-  this->UseCTestLaunch = false;
 }
 
 void cmCTestBuildHandler::PopulateCustomVectors(cmMakefile* mf)
@@ -501,7 +450,7 @@ int cmCTestBuildHandler::ProcessHandler()
 
 void cmCTestBuildHandler::GenerateXMLHeader(cmXMLWriter& xml)
 {
-  this->CTest->StartXML(xml, this->AppendXML);
+  this->CTest->StartXML(xml, this->CMake, this->AppendXML);
   this->CTest->GenerateSubprojectsOutput(xml);
   xml.StartElement("Build");
   xml.Element("StartDateTime", this->StartBuild);
@@ -579,9 +528,6 @@ void cmCTestBuildHandler::GenerateXMLLogScraped(cmXMLWriter& xml)
   int numErrorsAllowed = this->MaxErrors;
   int numWarningsAllowed = this->MaxWarnings;
   std::string srcdir = this->CTest->GetCTestConfiguration("SourceDirectory");
-  // make sure the source dir is in the correct case on windows
-  // via a call to collapse full path.
-  srcdir = cmStrCat(cmSystemTools::CollapseFullPath(srcdir), '/');
   for (it = ew.begin();
        it != ew.end() && (numErrorsAllowed || numWarningsAllowed); it++) {
     cmCTestBuildErrorWarning* cm = &(*it);
@@ -612,8 +558,9 @@ void cmCTestBuildHandler::GenerateXMLLogScraped(cmXMLWriter& xml)
             }
           } else {
             // make sure it is a full path with the correct case
-            cm->SourceFile = cmSystemTools::CollapseFullPath(cm->SourceFile);
-            cmSystemTools::ReplaceString(cm->SourceFile, srcdir.c_str(), "");
+            cm->SourceFile =
+              cmSystemTools::ToNormalizedPathOnDisk(cm->SourceFile);
+            cmSystemTools::ReplaceString(cm->SourceFile, srcdir, "");
           }
           cm->LineNumber = atoi(re->match(rit.LineIndex).c_str());
           break;
@@ -1121,10 +1068,10 @@ void cmCTestBuildHandler::ProcessBuffer(const char* data, size_t length,
 
   // And if this is verbose output, display the content of the chunk
   cmCTestLog(this->CTest, HANDLER_VERBOSE_OUTPUT,
-             cmCTestLogWrite(data, length));
+             cm::string_view(data, length));
 
   // Always store the chunk to the file
-  ofs << cmCTestLogWrite(data, length);
+  ofs << cm::string_view(data, length);
 }
 
 int cmCTestBuildHandler::ProcessSingleLine(const char* data)

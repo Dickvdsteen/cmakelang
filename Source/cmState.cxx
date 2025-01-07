@@ -13,9 +13,9 @@
 #include "cmsys/RegularExpression.hxx"
 
 #include "cmCacheManager.h"
-#include "cmCommand.h"
 #include "cmDefinitions.h"
 #include "cmExecutionStatus.h"
+#include "cmGlobCacheEntry.h"
 #include "cmGlobVerificationManager.h"
 #include "cmList.h"
 #include "cmListFileCache.h"
@@ -238,15 +238,18 @@ bool cmState::SaveVerificationScript(const std::string& path,
                                                                messenger);
 }
 
-void cmState::AddGlobCacheEntry(
-  bool recurse, bool listDirectories, bool followSymlinks,
-  const std::string& relative, const std::string& expression,
-  const std::vector<std::string>& files, const std::string& variable,
-  cmListFileBacktrace const& backtrace, cmMessenger* messenger)
+void cmState::AddGlobCacheEntry(const cmGlobCacheEntry& entry,
+                                const std::string& variable,
+                                cmListFileBacktrace const& backtrace,
+                                cmMessenger* messenger)
 {
-  this->GlobVerificationManager->AddCacheEntry(
-    recurse, listDirectories, followSymlinks, relative, expression, files,
-    variable, backtrace, messenger);
+  this->GlobVerificationManager->AddCacheEntry(entry, variable, backtrace,
+                                               messenger);
+}
+
+std::vector<cmGlobCacheEntry> cmState::GetGlobCacheEntries() const
+{
+  return this->GlobVerificationManager->GetCacheEntries();
 }
 
 void cmState::RemoveCacheEntry(std::string const& key)
@@ -393,12 +396,6 @@ void cmState::SetIsGeneratorMultiConfig(bool b)
   this->IsGeneratorMultiConfig = b;
 }
 
-void cmState::AddBuiltinCommand(std::string const& name,
-                                std::unique_ptr<cmCommand> command)
-{
-  this->AddBuiltinCommand(name, cmLegacyCommandWrapper(std::move(command)));
-}
-
 void cmState::AddBuiltinCommand(std::string const& name, Command command)
 {
   assert(name == cmSystemTools::LowerCase(name));
@@ -467,8 +464,6 @@ void cmState::AddDisallowedCommand(std::string const& name,
           CM_FALLTHROUGH;
         case cmPolicies::OLD:
           break;
-        case cmPolicies::REQUIRED_IF_USED:
-        case cmPolicies::REQUIRED_ALWAYS:
         case cmPolicies::NEW:
           mf.IssueMessage(MessageType::FATAL_ERROR, message);
           return true;
@@ -655,6 +650,11 @@ cmValue cmState::GetGlobalProperty(const std::string& prop)
       &FOR_EACH_CUDA_FEATURE(STRING_LIST_ELEMENT)[1]);
     return cmValue(s_out);
   }
+  if (prop == "CMAKE_HIP_KNOWN_FEATURES") {
+    static const std::string s_out(
+      &FOR_EACH_HIP_FEATURE(STRING_LIST_ELEMENT)[1]);
+    return cmValue(s_out);
+  }
 
 #undef STRING_LIST_ELEMENT
   return this->GlobalProperties.GetPropertyValue(prop);
@@ -662,7 +662,7 @@ cmValue cmState::GetGlobalProperty(const std::string& prop)
 
 bool cmState::GetGlobalPropertyAsBool(const std::string& prop)
 {
-  return cmIsOn(this->GetGlobalProperty(prop));
+  return this->GetGlobalProperty(prop).IsOn();
 }
 
 void cmState::SetSourceDirectory(std::string const& sourceDirectory)
@@ -710,6 +710,16 @@ void cmState::SetGhsMultiIDE(bool ghsMultiIDE)
 bool cmState::UseGhsMultiIDE() const
 {
   return this->GhsMultiIDE;
+}
+
+void cmState::SetBorlandMake(bool borlandMake)
+{
+  this->BorlandMake = borlandMake;
+}
+
+bool cmState::UseBorlandMake() const
+{
+  return this->BorlandMake;
 }
 
 void cmState::SetWatcomWMake(bool watcomWMake)

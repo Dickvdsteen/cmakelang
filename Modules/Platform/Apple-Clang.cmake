@@ -15,10 +15,9 @@ macro(__apple_compiler_clang lang)
     set(CMAKE_${lang}_SYSTEM_FRAMEWORK_SEARCH_FLAG "-iframework ")
   endif()
 
-  set(CMAKE_${lang}_LINK_LIBRARIES_PROCESSING ORDER=REVERSE UNICITY=ALL)
-
   set(CMAKE_${lang}_LINK_LIBRARY_USING_FRAMEWORK "-framework <LIBRARY>")
   set(CMAKE_${lang}_LINK_LIBRARY_USING_FRAMEWORK_SUPPORTED TRUE)
+  set(CMAKE_${lang}_LINK_LIBRARY_FRAMEWORK_ATTRIBUTES LIBRARY_TYPE=STATIC,SHARED DEDUPLICATION=DEFAULT OVERRIDE=DEFAULT)
 
   # linker selection
   set(CMAKE_${lang}_USING_LINKER_SYSTEM "-fuse-ld=ld")
@@ -43,6 +42,8 @@ macro(__apple_compiler_clang lang)
     set(CMAKE_${lang}_OSX_DEPLOYMENT_TARGET_FLAG "-mwatchos-version-min=")
   elseif(_CMAKE_OSX_SYSROOT_PATH MATCHES "/WatchSimulator")
     set(CMAKE_${lang}_OSX_DEPLOYMENT_TARGET_FLAG "-mwatchos-simulator-version-min=")
+  elseif(_CMAKE_OSX_SYSROOT_PATH MATCHES "/MacOSX" AND CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(CMAKE_${lang}_OSX_DEPLOYMENT_TARGET_FLAG "--target=<ARCH>-apple-ios<VERSION_MIN>-macabi")
   else()
     set(CMAKE_${lang}_OSX_DEPLOYMENT_TARGET_FLAG "-mmacosx-version-min=")
   endif()

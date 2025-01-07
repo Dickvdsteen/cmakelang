@@ -3,13 +3,10 @@
 
 #include <chrono>
 #include <cstdio>
-#include <functional>
 #include <future>
-#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <string>
-#include <vector>
 
 #include <cm3p/cppdap/future.h>
 #include <cm3p/cppdap/io.h>
@@ -23,9 +20,10 @@
 #include "cmVersionConfig.h"
 
 #ifdef _WIN32
+#  include "cmsys/SystemTools.hxx"
+
 #  include "cmCryptoHash.h"
 #  include "cmDebuggerWindowsPipeConnection.h"
-#  include "cmSystemTools.h"
 #else
 #  include "cmDebuggerPosixPipeConnection.h"
 #endif
@@ -72,7 +70,7 @@ bool testProtocolWithPipes()
 #ifdef _WIN32
   std::string namedPipe = R"(\\.\pipe\LOCAL\CMakeDebuggerPipe2_)" +
     cmCryptoHash(cmCryptoHash::AlgoSHA256)
-      .HashString(cmSystemTools::GetCurrentWorkingDirectory());
+      .HashString(cmsys::SystemTools::GetCurrentWorkingDirectory());
 #else
   std::string namedPipe = "CMakeDebuggerPipe2";
 #endif
@@ -180,7 +178,5 @@ bool testProtocolWithPipes()
 
 int testDebuggerAdapterPipe(int, char*[])
 {
-  return runTests(std::vector<std::function<bool()>>{
-    testProtocolWithPipes,
-  });
+  return runTests({ testProtocolWithPipes });
 }

@@ -20,6 +20,7 @@
 
 #include "cmCryptoHash.h"
 #include "cmDocumentationEntry.h"
+#include "cmExperimental.h"
 #include "cmGeneratorTarget.h"
 #include "cmGlobalGenerator.h"
 #include "cmGlobalVisualStudio71Generator.h"
@@ -218,15 +219,23 @@ bool cmGlobalVisualStudio10Generator::SetGeneratorToolset(
     if (vcPlatformToolsetRegex.find(platformToolset) ||
         platformToolset == "Test Toolset"_s) {
       std::string versionToolset = this->GeneratorToolsetVersion;
-      cmsys::RegularExpression versionToolsetRegex("^[0-9][0-9]\\.[0-9][0-9]");
+      cmsys::RegularExpression versionToolsetRegex(
+        "^([0-9][0-9])\\.([0-9])[0-9](\\.|$)");
       if (versionToolsetRegex.find(versionToolset)) {
-        versionToolset = cmStrCat('v', versionToolset.erase(2, 1));
+        versionToolset = cmStrCat('v', versionToolsetRegex.match(1),
+                                  versionToolsetRegex.match(2));
+        // Hard-code special cases for toolset versions whose first
+        // three digits do not match their toolset name.
+        // The v143 toolset reserves versions 14.30 through 14.49.
+        if (platformToolset == "v143"_s && versionToolset == "v144"_s) {
+          versionToolset = "v143";
+        }
       } else {
         // Version not recognized. Clear it.
         versionToolset.clear();
       }
 
-      if (!cmHasPrefix(versionToolset, platformToolset)) {
+      if (versionToolset != platformToolset) {
         mf->IssueMessage(
           MessageType::FATAL_ERROR,
           cmStrCat("Generator\n"
@@ -331,12 +340,13 @@ bool cmGlobalVisualStudio10Generator::SetGeneratorToolset(
 bool cmGlobalVisualStudio10Generator::ParseGeneratorToolset(
   std::string const& ts, cmMakefile* mf)
 {
-  std::vector<std::string> const fields = cmTokenize(ts, ",");
-  auto fi = fields.begin();
-  if (fi == fields.end()) {
+  std::vector<std::string> const fields =
+    cmTokenize(ts, ',', cmTokenizerMode::New);
+  if (fields.empty()) {
     return true;
   }
 
+  auto fi = fields.begin();
   // The first field may be the VS platform toolset.
   if (fi->find('=') == fi->npos) {
     this->GeneratorToolset = *fi;
@@ -467,6 +477,13 @@ bool cmGlobalVisualStudio10Generator::InitializeSystem(cmMakefile* mf)
     if (!this->InitializeWindowsStore(mf)) {
       return false;
     }
+  } else if (this->SystemName == "WindowsKernelModeDriver"_s &&
+             cmExperimental::HasSupportEnabled(
+               *mf, cmExperimental::Feature::WindowsKernelModeDriver)) {
+    this->SystemIsWindowsKernelModeDriver = true;
+    if (!this->InitializeWindowsKernelModeDriver(mf)) {
+      return false;
+    }
   } else if (this->SystemName == "Android"_s) {
     if (this->PlatformInGeneratorName) {
       mf->IssueMessage(
@@ -508,13 +525,6 @@ bool cmGlobalVisualStudio10Generator::InitializeWindowsCE(cmMakefile* mf)
 
   this->DefaultPlatformToolset = this->SelectWindowsCEToolset();
 
-  if (this->GetVersion() == cmGlobalVisualStudioGenerator::VSVersion::VS12) {
-    // VS 12 .NET CF defaults to .NET framework 3.9 for Windows CE.
-    this->DefaultTargetFrameworkVersion = "v3.9";
-    this->DefaultTargetFrameworkIdentifier = "WindowsEmbeddedCompact";
-    this->DefaultTargetFrameworkTargetsVersion = "v8.0";
-  }
-
   return true;
 }
 
@@ -532,6 +542,13 @@ bool cmGlobalVisualStudio10Generator::InitializeWindowsStore(cmMakefile* mf)
     MessageType::FATAL_ERROR,
     cmStrCat(this->GetName(), " does not support Windows Store."));
   return false;
+}
+
+bool cmGlobalVisualStudio10Generator::InitializeWindowsKernelModeDriver(
+  cmMakefile*)
+{
+  this->DefaultPlatformToolset = "WindowsKernelModeDriver10.0";
+  return true;
 }
 
 bool cmGlobalVisualStudio10Generator::InitializeTegraAndroid(cmMakefile* mf)
@@ -1265,14 +1282,6 @@ std::string cmGlobalVisualStudio10Generator::Encoding()
 const char* cmGlobalVisualStudio10Generator::GetToolsVersion() const
 {
   switch (this->Version) {
-    case cmGlobalVisualStudioGenerator::VSVersion::VS9:
-      return "4.0";
-
-      // in Visual Studio 2013 they detached the MSBuild tools version
-      // from the .Net Framework version and instead made it have it's own
-      // version number
-    case cmGlobalVisualStudioGenerator::VSVersion::VS12:
-      return "12.0";
     case cmGlobalVisualStudioGenerator::VSVersion::VS14:
       return "14.0";
     case cmGlobalVisualStudioGenerator::VSVersion::VS15:

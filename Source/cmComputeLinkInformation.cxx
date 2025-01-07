@@ -9,6 +9,7 @@
 
 #include <cm/memory>
 #include <cm/optional>
+#include <cm/string_view>
 #include <cmext/algorithm>
 #include <cmext/string_view>
 
@@ -567,8 +568,25 @@ bool cmComputeLinkInformation::Compute()
     return false;
   }
 
+  LinkLibrariesStrategy strategy = LinkLibrariesStrategy::REORDER_MINIMALLY;
+  if (cmValue s = this->Target->GetProperty("LINK_LIBRARIES_STRATEGY")) {
+    if (*s == "REORDER_MINIMALLY"_s) {
+      strategy = LinkLibrariesStrategy::REORDER_MINIMALLY;
+    } else if (*s == "REORDER_FREELY"_s) {
+      strategy = LinkLibrariesStrategy::REORDER_FREELY;
+    } else {
+      this->CMakeInstance->IssueMessage(
+        MessageType::FATAL_ERROR,
+        cmStrCat("LINK_LIBRARIES_STRATEGY value '", *s,
+                 "' is not recognized."),
+        this->Target->GetBacktrace());
+      return false;
+    }
+  }
+
   // Compute the ordered link line items.
-  cmComputeLinkDepends cld(this->Target, this->Config, this->LinkLanguage);
+  cmComputeLinkDepends cld(this->Target, this->Config, this->LinkLanguage,
+                           strategy);
   cld.SetOldLinkDirMode(this->OldLinkDirMode);
   cmComputeLinkDepends::EntryVector const& linkEntries = cld.Compute();
   FeatureDescriptor const* currentFeature = nullptr;
@@ -578,8 +596,7 @@ bool cmComputeLinkInformation::Compute()
     if (linkEntry.Kind == cmComputeLinkDepends::LinkEntry::Group) {
       const auto& groupFeature = this->GetGroupFeature(linkEntry.Feature);
       if (groupFeature.Supported) {
-        if (linkEntry.Item.Value == "</LINK_GROUP>" &&
-            currentFeature != nullptr) {
+        if (linkEntry.Item.Value == "</LINK_GROUP>" && currentFeature) {
           // emit feature suffix, if any
           if (!currentFeature->Suffix.empty()) {
             this->Items.emplace_back(
@@ -599,8 +616,7 @@ bool cmComputeLinkInformation::Compute()
       continue;
     }
 
-    if (currentFeature != nullptr &&
-        linkEntry.Feature != currentFeature->Name) {
+    if (currentFeature && linkEntry.Feature != currentFeature->Name) {
       // emit feature suffix, if any
       if (!currentFeature->Suffix.empty()) {
         this->Items.emplace_back(
@@ -612,8 +628,7 @@ bool cmComputeLinkInformation::Compute()
     }
 
     if (linkEntry.Feature != DEFAULT &&
-        (currentFeature == nullptr ||
-         linkEntry.Feature != currentFeature->Name)) {
+        (!currentFeature || linkEntry.Feature != currentFeature->Name)) {
       if (!this->AddLibraryFeature(linkEntry.Feature)) {
         continue;
       }
@@ -633,7 +648,7 @@ bool cmComputeLinkInformation::Compute()
     }
   }
 
-  if (currentFeature != nullptr) {
+  if (currentFeature) {
     // emit feature suffix, if any
     if (!currentFeature->Suffix.empty()) {
       this->Items.emplace_back(
@@ -646,7 +661,7 @@ bool cmComputeLinkInformation::Compute()
   // Restore the target link type so the correct system runtime
   // libraries are found.
   cmValue lss = this->Target->GetProperty("LINK_SEARCH_END_STATIC");
-  if (cmIsOn(lss)) {
+  if (lss.IsOn()) {
     this->SetCurrentLinkType(LinkStatic);
   } else {
     this->SetCurrentLinkType(this->StartLinkType);
@@ -738,13 +753,13 @@ public:
 private:
   std::string ExpandVariable(std::string const& variable) override
   {
-    if (this->Library != nullptr && variable == "LIBRARY") {
+    if (this->Library && variable == "LIBRARY") {
       return *this->Library;
     }
-    if (this->LibItem != nullptr && variable == "LIB_ITEM") {
+    if (this->LibItem && variable == "LIB_ITEM") {
       return *this->LibItem;
     }
-    if (this->LinkItem != nullptr && variable == "LINK_ITEM") {
+    if (this->LinkItem && variable == "LINK_ITEM") {
       return *this->LinkItem;
     }
 
@@ -1451,7 +1466,7 @@ void cmComputeLinkInformation::ComputeLinkTypeInfo()
 
   // Lookup the starting link type from the target (linked statically?).
   cmValue lss = this->Target->GetProperty("LINK_SEARCH_START_STATIC");
-  this->StartLinkType = cmIsOn(lss) ? LinkStatic : LinkShared;
+  this->StartLinkType = lss.IsOn() ? LinkStatic : LinkShared;
   this->CurrentLinkType = this->StartLinkType;
 }
 
@@ -1835,8 +1850,6 @@ bool cmComputeLinkInformation::CheckImplicitDirItem(LinkEntry const& entry)
       CM_FALLTHROUGH;
     case cmPolicies::OLD:
       break;
-    case cmPolicies::REQUIRED_ALWAYS:
-    case cmPolicies::REQUIRED_IF_USED:
     case cmPolicies::NEW:
       return false;
   }
@@ -1868,6 +1881,7 @@ void cmComputeLinkInformation::AddUserItem(LinkEntry const& entry,
   //   foo       ==>  -lfoo
   //   libfoo.a  ==>  -Wl,-Bstatic -lfoo
 
+  const cm::string_view LINKER{ "LINKER:" };
   BT<std::string> const& item = entry.Item;
 
   if (item.Value[0] == '-' || item.Value[0] == '$' || item.Value[0] == '`') {
@@ -1888,6 +1902,13 @@ void cmComputeLinkInformation::AddUserItem(LinkEntry const& entry,
 
     // Use the item verbatim.
     this->Items.emplace_back(item, ItemIsPath::No);
+    return;
+  }
+  if (cmHasPrefix(item.Value, LINKER)) {
+    std::vector<BT<std::string>> linkerFlag{ 1, item };
+    this->Target->ResolveLinkerWrapper(linkerFlag, this->GetLinkLanguage(),
+                                       true);
+    this->Items.emplace_back(linkerFlag.front(), ItemIsPath::No);
     return;
   }
 
@@ -2182,18 +2203,6 @@ void cmComputeLinkInformation::HandleBadFullItem(LinkEntry const& entry,
     case cmPolicies::NEW:
       // NEW behavior will not get here.
       break;
-    case cmPolicies::REQUIRED_IF_USED:
-    case cmPolicies::REQUIRED_ALWAYS: {
-      std::ostringstream e;
-      /* clang-format off */
-      e << cmPolicies::GetRequiredPolicyError(cmPolicies::CMP0008) << "\n"
-             "Target \"" << this->Target->GetName() << "\" links to item\n"
-             "  " << item << "\n"
-             "which is a full-path but not a valid library file name.";
-      /* clang-format on */
-      this->CMakeInstance->IssueMessage(MessageType::FATAL_ERROR, e.str(),
-                                        this->Target->GetBacktrace());
-    } break;
   }
 }
 
@@ -2225,15 +2234,6 @@ bool cmComputeLinkInformation::FinishLinkerSearchDirectories()
     case cmPolicies::NEW:
       // Should never happen due to assignment of OldLinkDirMode
       return true;
-    case cmPolicies::REQUIRED_IF_USED:
-    case cmPolicies::REQUIRED_ALWAYS: {
-      std::ostringstream e;
-      e << cmPolicies::GetRequiredPolicyError(cmPolicies::CMP0003) << '\n';
-      this->PrintLinkPolicyDiagnosis(e);
-      this->CMakeInstance->IssueMessage(MessageType::FATAL_ERROR, e.str(),
-                                        this->Target->GetBacktrace());
-      return false;
-    }
   }
 
   // Add the link directories for full path items.

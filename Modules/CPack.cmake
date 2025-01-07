@@ -478,27 +478,30 @@ The following variables are for advanced uses of CPack:
   .. versionadded:: 3.25
 
   Specify the ``readelf`` executable path used by CPack.
-  The default value will be ``CMAKE_READELF`` when set.  Otherwise,
-  the default value will be empty and CPack will use :command:`find_program`
-  to determine the ``readelf`` path when needed.
+  The default value will be taken from the ``CMAKE_READELF`` variable, if set,
+  which may be populated by an internal CMake module.  If ``CMAKE_READELF``
+  is not set, CPack will use :command:`find_program` to determine the
+  ``readelf`` path when needed.
 
 .. variable:: CPACK_OBJCOPY_EXECUTABLE
 
   .. versionadded:: 3.25
 
   Specify the ``objcopy`` executable path used by CPack.
-  The default value will be ``CMAKE_OBJCOPY`` when set.  Otherwise,
-  the default value will be empty and CPack will use :command:`find_program`
-  to determine the ``objcopy`` path when needed.
+  The default value will be taken from the ``CMAKE_OBJCOPY`` variable, if set,
+  which may be populated by an internal CMake module.  If ``CMAKE_OBJCOPY``
+  is not set, CPack will use :command:`find_program` to determine the
+  ``objcopy`` path when needed.
 
 .. variable:: CPACK_OBJDUMP_EXECUTABLE
 
   .. versionadded:: 3.25
 
   Specify the ``objdump`` executable path used by CPack.
-  The default value will be ``CMAKE_OBJDUMP`` when set.  Otherwise,
-  the default value will be empty and CPack will use :command:`find_program`
-  to determine the ``objdump`` path when needed.
+  The default value will be taken from the ``CMAKE_OBJDUMP`` variable, if set,
+  which may be populated by an internal CMake module.  If ``CMAKE_OBJDUMP``
+  is not set, CPack will use :command:`find_program` to determine the
+  ``objdump`` path when needed.
 
 #]=======================================================================]
 
@@ -882,6 +885,20 @@ endif()
 
 # WiX specific variables
 _cpack_set_default(CPACK_WIX_SIZEOF_VOID_P "${CMAKE_SIZEOF_VOID_P}")
+if(NOT DEFINED CPACK_WIX_INSTALL_SCOPE)
+  cmake_policy(GET CMP0172 _CPack_CMP0172)
+  if("x${_CPack_CMP0172}x" STREQUAL "xNEWx")
+    _cpack_set_default(CPACK_WIX_INSTALL_SCOPE perMachine)
+  elseif(NOT "x${_CPack_CMP0172}x" STREQUAL "xOLDx" AND CMAKE_POLICY_WARNING_CMP0172)
+    cmake_policy(GET_WARNING CMP0172 _CMP0172_warning)
+    message(AUTHOR_WARNING
+      "${_CMP0172_warning}\n"
+      "For compatibility, CMake will not enable per-machine installation by default in the CPack WIX Generator."
+      )
+    unset(_CMP0172_warning)
+  endif()
+  unset(_CPack_CMP0172)
+endif()
 
 # productbuild specific variables
 cmake_policy(GET CMP0161 _CPack_CMP0161)

@@ -29,7 +29,7 @@ public:
   // default feature: link library without decoration
   static const std::string DEFAULT;
 
-  cmLinkItem();
+  cmLinkItem() = default;
   cmLinkItem(std::string s, bool c, cmListFileBacktrace bt,
              std::string feature = DEFAULT);
   cmLinkItem(cmGeneratorTarget const* t, bool c, cmListFileBacktrace bt,
@@ -50,7 +50,7 @@ public:
 class cmLinkImplItem : public cmLinkItem
 {
 public:
-  cmLinkImplItem();
+  cmLinkImplItem() = default;
   cmLinkImplItem(cmLinkItem item, bool checkCMP0027);
   bool CheckCMP0027 = false;
 };
@@ -124,6 +124,7 @@ struct cmOptionalLinkInterface : public cmLinkInterface
   bool AllDone = false;
   bool Exists = false;
   bool Explicit = false;
+  bool CheckLinkLibraries = false;
 };
 
 struct cmHeadToLinkInterfaceMap
@@ -148,10 +149,11 @@ struct cmOptionalLinkImplementation : public cmLinkImplementation
   bool LibrariesDone = false;
   bool LanguagesDone = false;
   bool HadHeadSensitiveCondition = false;
+  bool CheckLinkLibraries = false;
 };
 
 /** Compute the link type to use for the given configuration.  */
-inline cmTargetLinkLibraryType CMP0003_ComputeLinkType(
+inline cmTargetLinkLibraryType ComputeLinkType(
   const std::string& config, std::vector<std::string> const& debugConfigs)
 {
   // No configuration is always optimized.

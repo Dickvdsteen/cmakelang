@@ -8,11 +8,11 @@ CheckIncludeFiles
 Provides a macro to check if a list of one or more header files can
 be included together.
 
-.. command:: CHECK_INCLUDE_FILES
+.. command:: check_include_files
 
   .. code-block:: cmake
 
-    CHECK_INCLUDE_FILES("<includes>" <variable> [LANGUAGE <language>])
+    check_include_files("<includes>" <variable> [LANGUAGE <language>])
 
   Check if the given ``<includes>`` list may be included together
   in a source file and store the result in an internal cache
@@ -36,6 +36,8 @@ the way the check is run:
 .. include:: /module/CMAKE_REQUIRED_LINK_OPTIONS.txt
 
 .. include:: /module/CMAKE_REQUIRED_LIBRARIES.txt
+
+.. include:: /module/CMAKE_REQUIRED_LINK_DIRECTORIES.txt
 
 .. include:: /module/CMAKE_REQUIRED_QUIET.txt
 
@@ -126,6 +128,13 @@ macro(CHECK_INCLUDE_FILES INCLUDE VARIABLE)
       unset(_CIF_CMP0075)
     endif()
 
+    if(CMAKE_REQUIRED_LINK_DIRECTORIES)
+      set(_CIF_LINK_DIRECTORIES
+        "-DLINK_DIRECTORIES:STRING=${CMAKE_REQUIRED_LINK_DIRECTORIES}")
+    else()
+      set(_CIF_LINK_DIRECTORIES)
+    endif()
+
     if(NOT CMAKE_REQUIRED_QUIET)
       message(CHECK_START "Looking for ${_description}")
     endif()
@@ -137,9 +146,11 @@ macro(CHECK_INCLUDE_FILES INCLUDE VARIABLE)
       CMAKE_FLAGS
       -DCOMPILE_DEFINITIONS:STRING=${MACRO_CHECK_INCLUDE_FILES_FLAGS}
       "${CHECK_INCLUDE_FILES_INCLUDE_DIRS}"
+      "${_CIF_LINK_DIRECTORIES}"
       )
     unset(_CIF_LINK_OPTIONS)
     unset(_CIF_LINK_LIBRARIES)
+    unset(_CIF_LINK_DIRECTORIES)
     if(${VARIABLE})
       if(NOT CMAKE_REQUIRED_QUIET)
         message(CHECK_PASS "found")

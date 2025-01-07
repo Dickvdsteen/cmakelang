@@ -20,14 +20,17 @@ Normal Libraries
   The optional ``<type>`` specifies the type of library to be created:
 
   ``STATIC``
-    An archive of object files for use when linking other targets.
+    A :ref:`Static Library <Static Libraries>`:
+    an archive of object files for use when linking other targets.
 
   ``SHARED``
-    A dynamic library that may be linked by other targets and loaded
+    A :ref:`Shared Library <Shared Libraries>`:
+    a dynamic library that may be linked by other targets and loaded
     at runtime.
 
   ``MODULE``
-    A plugin that may not be linked by other targets, but may be
+    A :ref:`Module Library <Module Libraries>`:
+    a plugin that may not be linked by other targets, but may be
     dynamically loaded at runtime using dlopen-like functionality.
 
   If no ``<type>`` is given the default is ``STATIC`` or ``SHARED``
@@ -83,6 +86,13 @@ buildsystem properties.
 See also :prop_sf:`HEADER_FILE_ONLY` on what to do if some sources are
 pre-processed, and you want to have the original sources reachable from
 within IDE.
+
+.. versionchanged:: 3.30
+
+  On platforms that do not support shared libraries, ``add_library``
+  now fails on calls creating ``SHARED`` libraries instead of
+  automatically converting them to ``STATIC`` libraries as before.
+  See policy :policy:`CMP0164`.
 
 Object Libraries
 ^^^^^^^^^^^^^^^^

@@ -1,7 +1,41 @@
 include(RunCMake)
 include(RunCTest)
 
+# Do not use any proxy for lookup of an invalid site.
+# DNS failure by proxy looks different than DNS failure without proxy.
+set(ENV{no_proxy} "$ENV{no_proxy},badhostname.invalid")
+
 set(RunCMake_TEST_TIMEOUT 60)
+
+block()
+  set(RunCMake_TEST_BINARY_DIR ${RunCMake_BINARY_DIR}/FailureLabels)
+  set(RunCMake_TEST_NO_CLEAN 1)
+  file(REMOVE_RECURSE "${RunCMake_TEST_BINARY_DIR}")
+  file(MAKE_DIRECTORY "${RunCMake_TEST_BINARY_DIR}")
+  file(WRITE "${RunCMake_TEST_BINARY_DIR}/CTestTestfile.cmake" "
+add_test(ShortName \"${CMAKE_COMMAND}\" -E false)
+set_tests_properties(ShortName PROPERTIES LABELS \"Label1;Label2\")
+add_test(LongerName \"${CMAKE_COMMAND}\" -E false)
+set_tests_properties(LongerName PROPERTIES LABELS \"Label3\")
+add_test(Long_Test_Name_That_Is_Over_Fifty_Characters_In_Length \"${CMAKE_COMMAND}\" -E false)
+set_tests_properties(Long_Test_Name_That_Is_Over_Fifty_Characters_In_Length PROPERTIES LABELS \"Label4\")
+")
+  run_cmake_command(FailureLabels ${CMAKE_CTEST_COMMAND})
+endblock()
+
+block()
+  set(RunCMake_TEST_BINARY_DIR ${RunCMake_BINARY_DIR}/PrintLabels)
+  set(RunCMake_TEST_NO_CLEAN 1)
+  file(REMOVE_RECURSE "${RunCMake_TEST_BINARY_DIR}")
+  file(MAKE_DIRECTORY "${RunCMake_TEST_BINARY_DIR}")
+  file(WRITE "${RunCMake_TEST_BINARY_DIR}/CTestTestfile.cmake" "
+add_test(A \"${CMAKE_COMMAND}\" -E true)
+set_tests_properties(A PROPERTIES LABELS \"Label1;Label2\")
+add_test(B \"${CMAKE_COMMAND}\" -E true)
+set_tests_properties(B PROPERTIES LABELS \"Label3\")
+")
+  run_cmake_command(PrintLabels ${CMAKE_CTEST_COMMAND} --print-labels)
+endblock()
 
 run_cmake_command(repeat-opt-bad1
   ${CMAKE_CTEST_COMMAND} --repeat until-pass
@@ -208,8 +242,8 @@ endfunction()
 run_SkipRegexFoundTest()
 
 
-function(run_TestsFromFileTest arg)
-  set(RunCMake_TEST_BINARY_DIR ${RunCMake_BINARY_DIR}/TestsFromFile)
+function(run_TestsFromFileTest case)
+  set(RunCMake_TEST_BINARY_DIR ${RunCMake_BINARY_DIR}/TestsFromFile-${case})
   set(RunCMake_TEST_NO_CLEAN 1)
   file(REMOVE_RECURSE "${RunCMake_TEST_BINARY_DIR}")
   file(MAKE_DIRECTORY "${RunCMake_TEST_BINARY_DIR}")
@@ -219,10 +253,14 @@ add_test(Test1 \"${CMAKE_COMMAND}\" -E echo \"test1\")
 add_test(Test2 \"${CMAKE_COMMAND}\" -E echo \"test2\")
 add_test(Test11 \"${CMAKE_COMMAND}\" -E echo \"test11\")
 ")
-  run_cmake_command(TestsFromFile-${arg} ${CMAKE_CTEST_COMMAND} --${arg} ${RunCMake_SOURCE_DIR}/TestsFromFile-TestList.txt )
+  run_cmake_command(TestsFromFile-${case} ${CMAKE_CTEST_COMMAND} ${ARGN})
 endfunction()
-run_TestsFromFileTest(tests-from-file)
-run_TestsFromFileTest(exclude-from-file)
+run_TestsFromFileTest(include --tests-from-file ${RunCMake_SOURCE_DIR}/TestsFromFile-TestList.txt)
+run_TestsFromFileTest(exclude --exclude-from-file ${RunCMake_SOURCE_DIR}/TestsFromFile-TestList.txt)
+run_TestsFromFileTest(include-empty --tests-from-file ${RunCMake_SOURCE_DIR}/TestsFromFile-TestList-empty.txt)
+run_TestsFromFileTest(exclude-empty --exclude-from-file ${RunCMake_SOURCE_DIR}/TestsFromFile-TestList-empty.txt)
+run_TestsFromFileTest(include-missing --tests-from-file ${RunCMake_SOURCE_DIR}/TestsFromFile-TestList-missing.txt)
+run_TestsFromFileTest(exclude-missing --exclude-from-file ${RunCMake_SOURCE_DIR}/TestsFromFile-TestList-missing.txt)
 
 
 function(run_SerialFailed)
@@ -239,6 +277,44 @@ add_test(Echo \"${CMAKE_COMMAND}\" -E echo \"EchoTest\")
   run_cmake_command(SerialFailed ${CMAKE_CTEST_COMMAND} -V)
 endfunction()
 run_SerialFailed()
+
+function(run_Parallel case)
+  set(RunCMake_TEST_BINARY_DIR ${RunCMake_BINARY_DIR}/Parallel-${case})
+  set(RunCMake_TEST_NO_CLEAN 1)
+  file(REMOVE_RECURSE "${RunCMake_TEST_BINARY_DIR}")
+  file(MAKE_DIRECTORY "${RunCMake_TEST_BINARY_DIR}")
+  file(WRITE "${RunCMake_TEST_BINARY_DIR}/CTestTestfile.cmake" "
+foreach(i RANGE 1 6)
+  add_test(test\${i} \"${CMAKE_COMMAND}\" -E true)
+endforeach()
+")
+  run_cmake_command(Parallel-${case} ${CMAKE_CTEST_COMMAND} ${ARGN})
+endfunction()
+# Spoof a number of processors to make these tests predictable.
+set(ENV{__CTEST_FAKE_PROCESSOR_COUNT_FOR_TESTING} 1)
+run_Parallel(bad --parallel bad)
+run_Parallel(j-bad -j bad)
+set(RunCMake_TEST_RAW_ARGS [[--parallel ""]])
+run_Parallel(empty) # With 1 processor, defaults to 2.
+unset(RunCMake_TEST_RAW_ARGS)
+run_Parallel(j -j) # With 1 processor, defaults to 2.
+run_Parallel(0 -j0)
+run_Parallel(4 --parallel 4)
+run_Parallel(N --parallel -N)
+set(ENV{CTEST_PARALLEL_LEVEL} bad)
+run_Parallel(env-bad)
+if(CMAKE_HOST_WIN32)
+  set(ENV{CTEST_PARALLEL_LEVEL} " ")
+else()
+  set(ENV{CTEST_PARALLEL_LEVEL} "")
+endif()
+run_Parallel(env-empty) # With 1 processor, defaults to 2.
+set(ENV{CTEST_PARALLEL_LEVEL} 0)
+run_Parallel(env-0)
+set(ENV{CTEST_PARALLEL_LEVEL} 3)
+run_Parallel(env-3)
+unset(ENV{CTEST_PARALLEL_LEVEL})
+unset(ENV{__CTEST_FAKE_PROCESSOR_COUNT_FOR_TESTING)
 
 function(run_TestLoad name load)
   set(RunCMake_TEST_BINARY_DIR ${RunCMake_BINARY_DIR}/TestLoad)
@@ -279,6 +355,9 @@ function(run_TestOutputSize)
   set(RunCMake_TEST_NO_CLEAN 1)
   file(REMOVE_RECURSE "${RunCMake_TEST_BINARY_DIR}")
   file(MAKE_DIRECTORY "${RunCMake_TEST_BINARY_DIR}")
+  file(WRITE "${RunCMake_TEST_BINARY_DIR}/DartConfiguration.tcl" "
+BuildDirectory: ${RunCMake_TEST_BINARY_DIR}
+")
   file(WRITE "${RunCMake_TEST_BINARY_DIR}/CTestTestfile.cmake" "
   add_test(PassingTest \"${CMAKE_COMMAND}\" -E echo PassingTestOutput)
   add_test(FailingTest \"${CMAKE_COMMAND}\" -E no_such_command)
@@ -299,6 +378,9 @@ function(run_TestOutputTruncation mode expected)
   set(TRUNCATED_OUTPUT ${expected})  # used in TestOutputTruncation-check.cmake
   file(REMOVE_RECURSE "${RunCMake_TEST_BINARY_DIR}")
   file(MAKE_DIRECTORY "${RunCMake_TEST_BINARY_DIR}")
+  file(WRITE "${RunCMake_TEST_BINARY_DIR}/DartConfiguration.tcl" "
+BuildDirectory: ${RunCMake_TEST_BINARY_DIR}
+")
   file(WRITE "${RunCMake_TEST_BINARY_DIR}/CTestTestfile.cmake" "
   add_test(Truncation_${mode} \"${CMAKE_COMMAND}\" -E echo 123456789)
 ")
@@ -387,10 +469,16 @@ function(run_ShowOnly)
   file(WRITE "${RunCMake_TEST_BINARY_DIR}/CTestTestfile.cmake" "
     add_test(ShowOnly \"${CMAKE_COMMAND}\" -E echo)
     set_tests_properties(ShowOnly PROPERTIES
-      WILL_FAIL true
+      GENERATED_RESOURCE_SPEC_FILE \"/Path/Does/Not/Exist\"
       RESOURCE_GROUPS \"2,threads:2,gpus:4;gpus:2,threads:4\"
       REQUIRED_FILES RequiredFileDoesNotExist
       _BACKTRACE_TRIPLES \"file1;1;add_test;file0;;\"
+      TIMEOUT 1234.5
+      TIMEOUT_SIGNAL_NAME SIGINT
+      TIMEOUT_SIGNAL_GRACE_PERIOD 2.1
+      WILL_FAIL true
+      USER_DEFINED_A \"User defined property A value\"
+      USER_DEFINED_B \"User defined property B value\"
       )
     add_test(ShowOnlyNotAvailable NOT_AVAILABLE)
 ")
@@ -440,6 +528,32 @@ run_NoTests()
 # Check the configuration type variable is passed
 run_ctest(check-configuration-type)
 
+function(run_FailDrop case)
+  set(RunCMake_TEST_BINARY_DIR ${RunCMake_BINARY_DIR}/FailDrop-${case}-build)
+  run_cmake_with_options(FailDrop-${case} ${ARGN})
+  unset(ENV{CMAKE_TLS_VERIFY}) # Test that env variable is saved in ctest config file.
+  unset(ENV{CMAKE_TLS_VERSION}) # Test that env variable is saved in ctest config file.
+  set(RunCMake_TEST_NO_CLEAN 1)
+  run_cmake_command(FailDrop-${case}-ctest
+    ${CMAKE_CTEST_COMMAND} -M Experimental -T Submit -VV
+    )
+endfunction()
+run_FailDrop(TLSVersion-1.1 -DCTEST_TLS_VERSION=1.1)
+run_FailDrop(TLSVersion-1.1-cmake -DCMAKE_TLS_VERSION=1.1) # Test fallback to CMake variable.
+set(ENV{CMAKE_TLS_VERSION} 1.1) # Test fallback to env variable.
+run_FailDrop(TLSVersion-1.1-env)
+unset(ENV{CMAKE_TLS_VERSION})
+run_FailDrop(TLSVerify-ON -DCTEST_TLS_VERIFY=ON)
+run_FailDrop(TLSVerify-ON-cmake -DCMAKE_TLS_VERIFY=ON) # Test fallback to CMake variable.
+set(ENV{CMAKE_TLS_VERIFY} 1) # Test fallback to env variable.
+run_FailDrop(TLSVerify-ON-env)
+unset(ENV{CMAKE_TLS_VERIFY})
+run_FailDrop(TLSVerify-OFF -DCTEST_TLS_VERIFY=OFF)
+run_FailDrop(TLSVerify-OFF-cmake -DCMAKE_TLS_VERIFY=OFF) # Test fallback to CMake variable.
+set(ENV{CMAKE_TLS_VERIFY} 0) # Test fallback to env variable.
+run_FailDrop(TLSVerify-OFF-env)
+unset(ENV{CMAKE_TLS_VERIFY})
+
 run_cmake_command(EmptyDirCoverage-ctest
   ${CMAKE_CTEST_COMMAND} -C Debug -M Experimental -T Coverage
   )
@@ -468,7 +582,7 @@ run_MemCheckSan(UndefinedBehavior "simulate_sanitizer=1")
 run_cmake_command(test-dir-invalid-arg ${CMAKE_CTEST_COMMAND} --test-dir)
 run_cmake_command(test-dir-non-existing-dir ${CMAKE_CTEST_COMMAND} --test-dir non-existing-dir)
 
-function(run_testDir)
+function(run_testDir testName testPreset)
   set(RunCMake_TEST_BINARY_DIR ${RunCMake_BINARY_DIR}/testDir)
   set(RunCMake_TEST_NO_CLEAN 1)
   file(REMOVE_RECURSE "${RunCMake_TEST_BINARY_DIR}")
@@ -478,9 +592,16 @@ function(run_testDir)
   add_test(Test1 \"${CMAKE_COMMAND}\" -E true)
   add_test(Test2 \"${CMAKE_COMMAND}\" -E true)
   ")
-  run_cmake_command(testDir ${CMAKE_CTEST_COMMAND} --test-dir "${RunCMake_TEST_BINARY_DIR}/sub")
+  if (testPreset)
+    set(presetCommandLine --preset=default)
+    configure_file(
+      ${RunCMake_SOURCE_DIR}/testDir-presets.json.in
+      ${RunCMake_TEST_BINARY_DIR}/CMakePresets.json)
+  endif()
+  run_cmake_command(${testName} ${CMAKE_CTEST_COMMAND} --test-dir "${RunCMake_TEST_BINARY_DIR}/sub" ${presetCommandLine})
 endfunction()
-run_testDir()
+run_testDir(testDir 0)
+run_testDir(testDir-preset 1)
 
 # Test --output-junit
 function(run_output_junit)
@@ -500,6 +621,8 @@ set_tests_properties(test5 PROPERTIES  SKIP_REGULAR_EXPRESSION \"please skip\")
   run_cmake_command(output-junit ${CMAKE_CTEST_COMMAND} --output-junit "${RunCMake_TEST_BINARY_DIR}/junit.xml")
 endfunction()
 run_output_junit()
+
+run_cmake_command(invalid-ctest-argument ${CMAKE_CTEST_COMMAND} --not-a-valid-ctest-argument)
 
 if(WIN32)
   block()

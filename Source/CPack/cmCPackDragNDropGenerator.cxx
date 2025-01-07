@@ -101,13 +101,12 @@ int cmCPackDragNDropGenerator::InitializeInternal()
   }
   this->SetOptionIfNotSet("CPACK_COMMAND_REZ", rez_path);
 
-  if (this->IsSet("CPACK_DMG_SLA_DIR")) {
-    slaDirectory = this->GetOption("CPACK_DMG_SLA_DIR");
+  if (cmValue v = this->GetOptionIfSet("CPACK_DMG_SLA_DIR")) {
+    slaDirectory = *v;
     if (!slaDirectory.empty() &&
         this->IsOn("CPACK_DMG_SLA_USE_RESOURCE_FILE_LICENSE") &&
-        this->IsSet("CPACK_RESOURCE_FILE_LICENSE")) {
-      std::string license_file =
-        this->GetOption("CPACK_RESOURCE_FILE_LICENSE");
+        (v = this->GetOptionIfSet("CPACK_RESOURCE_FILE_LICENSE"))) {
+      std::string license_file = *v;
       if (!license_file.empty() &&
           (license_file.find("CPack.GenericLicense.txt") ==
            std::string::npos)) {
@@ -119,7 +118,8 @@ int cmCPackDragNDropGenerator::InitializeInternal()
         singleLicense = true;
       }
     }
-    if (!this->IsSet("CPACK_DMG_SLA_LANGUAGES")) {
+    cmValue lang = this->GetOptionIfSet("CPACK_DMG_SLA_LANGUAGES");
+    if (!lang) {
       cmCPackLogger(cmCPackLog::LOG_ERROR,
                     "CPACK_DMG_SLA_DIR set but no languages defined "
                     "(set CPACK_DMG_SLA_LANGUAGES)"
@@ -132,7 +132,7 @@ int cmCPackDragNDropGenerator::InitializeInternal()
       return 0;
     }
 
-    cmList languages{ this->GetOption("CPACK_DMG_SLA_LANGUAGES") };
+    cmList languages{ *lang };
     if (languages.empty()) {
       cmCPackLogger(cmCPackLog::LOG_ERROR,
                     "CPACK_DMG_SLA_LANGUAGES set but empty" << std::endl);
@@ -182,13 +182,14 @@ int cmCPackDragNDropGenerator::PackageFiles()
   }
 
   // component install
-  std::vector<std::string> package_files;
+  std::vector<std::pair<std::string, std::string>> package_files;
 
   std::map<std::string, cmCPackComponent>::iterator compIt;
   for (compIt = this->Components.begin(); compIt != this->Components.end();
        ++compIt) {
-    std::string name = GetComponentInstallDirNameSuffix(compIt->first);
-    package_files.push_back(name);
+    std::string dirName = GetComponentInstallDirNameSuffix(compIt->first);
+    std::string fileName = GetComponentInstallSuffix(compIt->first);
+    package_files.emplace_back(fileName, dirName);
   }
   std::sort(package_files.begin(), package_files.end());
   package_files.erase(std::unique(package_files.begin(), package_files.end()),
@@ -198,15 +199,15 @@ int cmCPackDragNDropGenerator::PackageFiles()
   packageFileNames.clear();
   for (auto const& package_file : package_files) {
     std::string full_package_name = cmStrCat(toplevel, '/');
-    if (package_file == "ALL_IN_ONE"_s) {
+    if (package_file.first == "ALL_IN_ONE"_s) {
       full_package_name += this->GetOption("CPACK_PACKAGE_FILE_NAME");
     } else {
-      full_package_name += package_file;
+      full_package_name += package_file.first;
     }
     full_package_name += GetOutputExtension();
     packageFileNames.push_back(full_package_name);
 
-    std::string src_dir = cmStrCat(toplevel, '/', package_file);
+    std::string src_dir = cmStrCat(toplevel, '/', package_file.second);
 
     if (0 == this->CreateDMG(src_dir, full_package_name)) {
       return 0;
@@ -707,7 +708,7 @@ bool cmCPackDragNDropGenerator::SupportsComponentInstallation() const
   return true;
 }
 
-std::string cmCPackDragNDropGenerator::GetComponentInstallDirNameSuffix(
+std::string cmCPackDragNDropGenerator::GetComponentInstallSuffix(
   const std::string& componentName)
 {
   // we want to group components together that go in the same dmg package
@@ -741,10 +742,17 @@ std::string cmCPackDragNDropGenerator::GetComponentInstallDirNameSuffix(
 
   std::string componentFileName = cmStrCat(
     "CPACK_DMG_", cmSystemTools::UpperCase(componentName), "_FILE_NAME");
-  if (this->IsSet(componentFileName)) {
-    return this->GetOption(componentFileName);
+  if (cmValue v = this->GetOptionIfSet(componentFileName)) {
+    return *v;
   }
   return GetComponentPackageFileName(package_file_name, componentName, false);
+}
+
+std::string cmCPackDragNDropGenerator::GetComponentInstallDirNameSuffix(
+  const std::string& componentName)
+{
+  return this->GetSanitizedDirOrFileName(
+    this->GetComponentInstallSuffix(componentName));
 }
 
 void cmCPackDragNDropGenerator::WriteRezXML(std::string const& file,

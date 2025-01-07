@@ -306,6 +306,7 @@ CMAKE_CXX_SOURCES="\
   cmBlockCommand \
   cmBreakCommand \
   cmBuildCommand \
+  cmBuildDatabase \
   cmCMakeLanguageCommand \
   cmCMakeMinimumRequired \
   cmList \
@@ -314,7 +315,6 @@ CMAKE_CXX_SOURCES="\
   cmCMakePolicyCommand \
   cmCPackPropertiesGenerator \
   cmCacheManager \
-  cmCommand \
   cmCommandArgumentParserHelper \
   cmCommands \
   cmCommonTargetGenerator \
@@ -345,14 +345,18 @@ CMAKE_CXX_SOURCES="\
   cmExecuteProcessCommand \
   cmExpandedCommandArgument \
   cmExperimental \
+  cmExportBuildCMakeConfigGenerator \
   cmExportBuildFileGenerator \
+  cmExportCMakeConfigGenerator \
   cmExportFileGenerator \
+  cmExportInstallCMakeConfigGenerator \
   cmExportInstallFileGenerator \
   cmExportSet \
   cmExportTryCompileFileGenerator \
   cmExprParserHelper \
   cmExternalMakefileProjectGenerator \
   cmFileCommand \
+  cmFileCommand_ReadMacho \
   cmFileCopier \
   cmFileInstaller \
   cmFileSet \
@@ -381,6 +385,14 @@ CMAKE_CXX_SOURCES="\
   cmGeneratorExpressionNode \
   cmGeneratorExpressionParser \
   cmGeneratorTarget \
+  cmGeneratorTarget_CompatibleInterface \
+  cmGeneratorTarget_IncludeDirectories \
+  cmGeneratorTarget_Link \
+  cmGeneratorTarget_LinkDirectories \
+  cmGeneratorTarget_Options \
+  cmGeneratorTarget_Sources \
+  cmGeneratorTarget_TargetPropertyEntry \
+  cmGeneratorTarget_TransitiveProperty \
   cmGetCMakePropertyCommand \
   cmGetDirectoryPropertyCommand \
   cmGetFilenameComponentCommand \
@@ -399,6 +411,7 @@ CMAKE_CXX_SOURCES="\
   cmIncludeGuardCommand \
   cmIncludeDirectoryCommand \
   cmIncludeRegularExpressionCommand \
+  cmInstallCMakeConfigExportGenerator \
   cmInstallCommand \
   cmInstallCommandArguments \
   cmInstallCxxModuleBmiGenerator \
@@ -445,6 +458,7 @@ CMAKE_CXX_SOURCES="\
   cmOutputConverter \
   cmParseArgumentsCommand \
   cmPathLabel \
+  cmPathResolver \
   cmPolicies \
   cmProcessOutput \
   cmProjectCommand \
@@ -454,6 +468,7 @@ CMAKE_CXX_SOURCES="\
   cmGccDepfileLexerHelper \
   cmGccDepfileReader \
   cmReturnCommand \
+  cmPackageInfoReader \
   cmPlaceholderExpander \
   cmPlistParser \
   cmRulePlaceholderExpander \
@@ -492,6 +507,7 @@ CMAKE_CXX_SOURCES="\
   cmTargetPropCommandBase \
   cmTargetPropertyComputer \
   cmTargetSourcesCommand \
+  cmTargetTraceDependencies \
   cmTest \
   cmTestGenerator \
   cmTimestamp \
@@ -511,6 +527,12 @@ CMAKE_CXX_SOURCES="\
   cmcmd  \
   cm_fileno \
 "
+
+if ${cmake_system_darwin}; then
+  CMAKE_CXX_SOURCES="${CMAKE_CXX_SOURCES}\
+    cmMachO \
+  "
+fi
 
 if ${cmake_system_mingw}; then
   CMAKE_CXX_SOURCES="${CMAKE_CXX_SOURCES}\
@@ -684,8 +706,8 @@ Configuration:
                           (default)
   --system-cppdap         use system-installed cppdap library
   --no-system-cppdap      use cmake-provided cppdap library (default)
-  --system-curl           use system-installed curl library
-  --no-system-curl        use cmake-provided curl library (default)
+  --system-curl           use system-installed curl library (default on macOS)
+  --no-system-curl        use cmake-provided curl library (default elsewhere)
   --system-expat          use system-installed expat library
   --no-system-expat       use cmake-provided expat library (default)
   --system-jsoncpp        use system-installed jsoncpp library
@@ -822,7 +844,6 @@ cmake_kwsys_config_replace_string ()
               s/@KWSYS_NAME_IS_KWSYS@/${KWSYS_NAME_IS_KWSYS}/g;
               s/@KWSYS_STL_HAS_WSTRING@/${KWSYS_STL_HAS_WSTRING}/g;
               s/@KWSYS_CXX_HAS_EXT_STDIO_FILEBUF_H@/${KWSYS_CXX_HAS_EXT_STDIO_FILEBUF_H}/g;
-              s/@KWSYS_SYSTEMTOOLS_USE_TRANSLATION_MAP@/${KWSYS_SYSTEMTOOLS_USE_TRANSLATION_MAP}/g;
              }" "${INFILE}" >> "${OUTFILE}${_tmp}"
     if test -f "${OUTFILE}${_tmp}"; then
       if "${_diff}" "${OUTFILE}" "${OUTFILE}${_tmp}" > /dev/null 2> /dev/null ; then
@@ -1542,7 +1563,6 @@ KWSYS_CXX_HAS_UNSETENV=0
 KWSYS_CXX_HAS_ENVIRON_IN_STDLIB_H=0
 KWSYS_CXX_HAS_UTIMENSAT=0
 KWSYS_CXX_HAS_UTIMES=0
-KWSYS_SYSTEMTOOLS_USE_TRANSLATION_MAP=1
 
 if cmake_try_run "${cmake_cxx_compiler}" \
   "${cmake_cxx_flags} ${cmake_ld_flags} -DTEST_KWSYS_CXX_HAS_SETENV" \
@@ -1660,6 +1680,10 @@ else
   cmake_report cmConfigure.h${_tmp} "#define CMAKE_BOOTSTRAP_MAKEFILES"
 fi
 
+if ${cmake_system_darwin}; then
+  cmake_report cmConfigure.h${_tmp} "#define CMake_USE_MACH_PARSER"
+fi
+
 if ${cmake_system_mingw}; then
   cmake_report cmConfigure.h${_tmp} "#if defined(_WIN32) && !defined(NOMINMAX)"
   cmake_report cmConfigure.h${_tmp} "#  define NOMINMAX"
@@ -1743,7 +1767,7 @@ libs=""
 uv_c_flags=""
 if ${cmake_system_mingw}; then
   uv_c_flags="${uv_c_flags} -DWIN32_LEAN_AND_MEAN -D_WIN32_WINNT=0x0600"
-  libs="${libs} -lws2_32 -lpsapi -liphlpapi -lshell32 -luserenv -lole32 -loleaut32"
+  libs="${libs} -lws2_32 -lpsapi -liphlpapi -lshell32 -luserenv -lole32 -loleaut32 -luuid"
 else
   case "${cmake_system}" in
     *AIX*)
@@ -1787,20 +1811,26 @@ if test "x${bootstrap_system_libuv}" = "x"; then
 else
   if test `which pkg-config`; then
     use_uv_flags="`pkg-config --cflags libuv`"
+    use_uv_ldflags="`pkg-config --libs libuv`"
     cmake_c_flags="${cmake_c_flags} ${use_uv_flags}"
     cmake_cxx_flags="${cmake_cxx_flags} ${use_uv_flags}"
+  else
+    use_uv_ldflags="-luv"
   fi
-  libs="${libs} -luv"
+  libs="${libs} ${use_uv_ldflags}"
 fi
 
 librhash_c_flags="-DNO_IMPORT_EXPORT"
 if test "x${bootstrap_system_librhash}" != "x"; then
   if test `which pkg-config`; then
     use_librhash_flags="`pkg-config --cflags librhash`"
+    use_librhash_ldflags="`pkg-config --libs librhash`"
     cmake_c_flags="${cmake_c_flags} ${use_librhash_flags}"
     cmake_cxx_flags="${cmake_cxx_flags} ${use_librhash_flags}"
+  else
+    use_librhash_ldflags="-lrhash"
   fi
-  libs="${libs} -lrhash"
+  libs="${libs} ${use_librhash_ldflags}"
 fi
 
 jsoncpp_cxx_flags=
@@ -1809,9 +1839,12 @@ if test "x${bootstrap_system_jsoncpp}" = "x"; then
 else
   if test `which pkg-config`; then
     use_jsoncpp_flags="`pkg-config --cflags jsoncpp`"
+    use_jsoncpp_ldflags="`pkg-config --libs jsoncpp`"
     cmake_cxx_flags="${cmake_cxx_flags} ${use_jsoncpp_flags}"
+  else
+    use_jsoncpp_ldflags="-ljsoncpp"
   fi
-  libs="${libs} -ljsoncpp"
+  libs="${libs} ${use_jsoncpp_ldflags}"
 fi
 
 if test "x${cmake_ansi_cxx_flags}" != "x"; then

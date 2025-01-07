@@ -161,8 +161,8 @@ private:
   bool CreateGroups(std::vector<cmLocalGenerator*>& generators);
   std::string XCodeEscapePath(const std::string& p);
   std::string RelativeToSource(const std::string& p);
+  std::string RelativeToRootBinary(const std::string& p);
   std::string RelativeToBinary(const std::string& p);
-  std::string ConvertToRelativeForMake(std::string const& p);
   void CreateCustomCommands(
     cmXCodeObject* buildPhases, cmXCodeObject* sourceBuildPhase,
     cmXCodeObject* headerBuildPhase, cmXCodeObject* resourceBuildPhase,
@@ -304,6 +304,7 @@ private:
   std::string LookupFlags(const std::string& varNamePrefix,
                           const std::string& varNameLang,
                           const std::string& varNameSuffix,
+                          cmGeneratorTarget const* gt,
                           const std::string& default_flags);
 
   class Factory;
@@ -371,7 +372,6 @@ private:
   std::map<std::string, cmXCodeObject*> TargetGroup;
   std::map<std::string, cmXCodeObject*> FileRefs;
   std::map<std::string, cmXCodeObject*> ExternalLibRefs;
-  std::map<std::string, cmXCodeObject*> EmbeddedLibRefs;
   std::map<cmGeneratorTarget const*, cmXCodeObject*> XCodeObjectMap;
   std::map<cmXCodeObject*, cmXCodeObject*> FileRefToBuildFileMap;
   std::map<cmXCodeObject*, cmXCodeObject*> FileRefToEmbedBuildFileMap;

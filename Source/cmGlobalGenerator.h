@@ -91,6 +91,9 @@ struct GeneratedMakeCommand
   bool RequiresOutputForward = false;
 };
 }
+namespace Json {
+class StreamWriter;
+}
 
 /** \class cmGlobalGenerator
  * \brief Responsible for overseeing the generation process for the entire tree
@@ -168,6 +171,11 @@ public:
     return false;
   }
 
+  virtual bool SupportsBuildDatabase() const { return false; }
+  bool AddBuildDatabaseTargets();
+  void AddBuildDatabaseFile(std::string const& lang, std::string const& config,
+                            std::string const& path);
+
   virtual bool IsGNUMakeJobServerAware() const { return false; }
 
   bool Compute();
@@ -240,15 +248,14 @@ public:
    * empty then all is assumed. clean indicates if a "make clean" should be
    * done first.
    */
-  int Build(
-    int jobs, const std::string& srcdir, const std::string& bindir,
-    const std::string& projectName,
-    std::vector<std::string> const& targetNames, std::ostream& ostr,
-    const std::string& makeProgram, const std::string& config,
-    const cmBuildOptions& buildOptions, bool verbose, cmDuration timeout,
-    cmSystemTools::OutputOption outputflag = cmSystemTools::OUTPUT_NONE,
-    std::vector<std::string> const& nativeOptions =
-      std::vector<std::string>());
+  int Build(int jobs, const std::string& srcdir, const std::string& bindir,
+            const std::string& projectName,
+            std::vector<std::string> const& targetNames, std::ostream& ostr,
+            const std::string& makeProgram, const std::string& config,
+            const cmBuildOptions& buildOptions, bool verbose,
+            cmDuration timeout, cmSystemTools::OutputOption outputMode,
+            std::vector<std::string> const& nativeOptions =
+              std::vector<std::string>());
 
   /**
    * Open a generated IDE project given the following information.
@@ -506,6 +513,8 @@ public:
   // Default config to use for cmake --build
   virtual std::string GetDefaultBuildConfig() const { return "Debug"; }
 
+  virtual cmValue GetDebuggerWorkingDirectory(cmGeneratorTarget* gt) const;
+
   // Class to track a set of dependencies.
   using TargetDependSet = cmTargetDependSet;
 
@@ -591,6 +600,18 @@ public:
   virtual bool SupportsCrossConfigs() const { return false; }
   virtual bool SupportsDefaultConfigs() const { return false; }
 
+  virtual std::string ConvertToOutputPath(std::string path) const
+  {
+    return path;
+  }
+  virtual std::string GetConfigDirectory(std::string const& config) const
+  {
+    if (!this->IsMultiConfig() || config.empty()) {
+      return {};
+    }
+    return cmStrCat('/', config);
+  }
+
   static std::string EscapeJSON(const std::string& s);
 
   void ProcessEvaluationFiles();
@@ -653,6 +674,18 @@ public:
 
   virtual std::string& EncodeLiteral(std::string& lit) { return lit; }
 
+  bool CheckCMP0171() const;
+
+  void AddInstallScript(std::string const& file);
+  void AddTestFile(std::string const& file);
+  void AddCMakeFilesToRebuild(std::vector<std::string>& files) const;
+
+  virtual const std::set<std::string>& GetDefaultConfigs() const
+  {
+    static std::set<std::string> configs;
+    return configs;
+  }
+
 protected:
   // for a project collect all its targets by following depend
   // information, and also collect all the targets
@@ -672,8 +705,15 @@ protected:
 
   virtual bool ComputeTargetDepends();
 
+#if !defined(CMAKE_BOOTSTRAP)
+  void WriteJsonContent(const std::string& fname,
+                        const Json::Value& value) const;
+  void WriteInstallJson() const;
+#endif
+
   virtual bool CheckALLOW_DUPLICATE_CUSTOM_TARGETS() const;
 
+  bool ApplyCXXStdTargets();
   bool DiscoverSyntheticTargets();
 
   bool AddHeaderSetVerification();
@@ -717,6 +757,8 @@ protected:
     std::vector<GlobalTargetInfo>& targets) const;
   void AddGlobalTarget_Install(std::vector<GlobalTargetInfo>& targets);
   void CreateGlobalTarget(GlobalTargetInfo const& gti, cmMakefile* mf);
+
+  void ReserveGlobalTargetCodegen();
 
   std::string FindMakeProgramFile;
   std::string ConfiguredFilesPath;
@@ -785,6 +827,10 @@ private:
   std::map<std::string, int> LanguageToLinkerPreference;
   std::map<std::string, std::string> LanguageToOriginalSharedLibFlags;
 
+#if !defined(CMAKE_BOOTSTRAP)
+  std::unique_ptr<Json::StreamWriter> JsonWriter;
+#endif
+
 #ifdef __APPLE__
   std::map<std::string, StripCommandStyle> StripCommandStyleMap;
 #endif
@@ -839,6 +885,8 @@ private:
 
   bool CheckCMP0037(std::string const& targetName,
                     std::string const& reason) const;
+  bool CheckCMP0037Prefix(std::string const& targetPrefix,
+                          std::string const& reason) const;
 
   void IndexMakefile(cmMakefile* mf);
   void IndexLocalGenerator(cmLocalGenerator* lg);
@@ -877,10 +925,20 @@ private:
   std::map<std::string, cmInstallRuntimeDependencySet*>
     RuntimeDependencySetsByName;
 
+  std::vector<std::string> InstallScripts;
+  std::vector<std::string> TestFiles;
+
 #if !defined(CMAKE_BOOTSTRAP)
   // Pool of file locks
   cmFileLockPool FileLockPool;
 #endif
+
+  using PerLanguageModuleDatabases =
+    std::map<std::string, std::vector<std::string>>;
+  using PerConfigModuleDatabases =
+    std::map<std::string, PerLanguageModuleDatabases>;
+  PerConfigModuleDatabases PerConfigModuleDbs;
+  PerLanguageModuleDatabases PerLanguageModuleDbs;
 
 protected:
   float FirstTimeProgress;
@@ -890,4 +948,5 @@ protected:
   bool ToolSupportsColor;
   bool InstallTargetEnabled;
   bool ConfigureDoneCMP0026AndCMP0024;
+  bool AllowGlobalTargetCodegen;
 };

@@ -72,6 +72,9 @@ Hints
 
 #]=======================================================================]
 
+cmake_policy(PUSH)
+cmake_policy(SET CMP0159 NEW) # file(STRINGS) with REGEX updates CMAKE_MATCH_<n>
+
 include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
 
 if(NOT CURL_NO_CURL_CMAKE)
@@ -86,6 +89,8 @@ if(NOT CURL_NO_CURL_CMAKE)
     find_package_handle_standard_args(CURL HANDLE_COMPONENTS CONFIG_MODE)
     # The upstream curl package sets CURL_VERSION, not CURL_VERSION_STRING.
     set(CURL_VERSION_STRING "${CURL_VERSION}")
+
+    cmake_policy(POP)
     return()
   endif()
 endif()
@@ -117,6 +122,8 @@ if(NOT CURL_LIBRARY)
       curllib_static
     # Windows older "Win32 - MSVC" prebuilts (libcurl.lib, e.g. libcurl-7.15.5-win32-msvc.zip):
       libcurl
+    # Some Windows prebuilt versions distribute `libcurl_a.lib` instead of `libcurl.lib`
+      libcurl_a
       NAMES_PER_DIR
       HINTS ${PC_CURL_LIBRARY_DIRS}
   )
@@ -232,10 +239,27 @@ if(CURL_FOUND)
         IMPORTED_LOCATION_DEBUG "${CURL_LIBRARY_DEBUG}")
     endif()
 
-    if(CURL_USE_STATIC_LIBS AND MSVC)
-       set_target_properties(CURL::libcurl PROPERTIES
-           INTERFACE_LINK_LIBRARIES "normaliz.lib;ws2_32.lib;wldap32.lib")
+    if(PC_CURL_FOUND)
+      if(PC_CURL_LINK_LIBRARIES)
+        set_property(TARGET CURL::libcurl PROPERTY
+                     INTERFACE_LINK_LIBRARIES "${PC_CURL_LINK_LIBRARIES}")
+      endif()
+      if(PC_CURL_LDFLAGS_OTHER)
+        set_property(TARGET CURL::libcurl PROPERTY
+                     INTERFACE_LINK_OPTIONS "${PC_CURL_LDFLAGS_OTHER}")
+      endif()
+      if(PC_CURL_CFLAGS_OTHER)
+        set_property(TARGET CURL::libcurl PROPERTY
+                     INTERFACE_COMPILE_OPTIONS "${PC_CURL_CFLAGS_OTHER}")
+      endif()
+    else()
+      if(CURL_USE_STATIC_LIBS AND MSVC)
+         set_target_properties(CURL::libcurl PROPERTIES
+             INTERFACE_LINK_LIBRARIES "normaliz.lib;ws2_32.lib;wldap32.lib")
+      endif()
     endif()
 
   endif()
 endif()
+
+cmake_policy(POP)

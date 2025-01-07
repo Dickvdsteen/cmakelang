@@ -57,15 +57,22 @@ private:
                                          const std::string& value,
                                          const std::string& varName);
 
-  void WriteProfileAction(cmXMLWriter& xout, const std::string& configuration);
+  void WriteProfileAction(cmXMLWriter& xout, const std::string& configuration,
+                          const std::string& container);
   void WriteAnalyzeAction(cmXMLWriter& xout, const std::string& configuration);
   void WriteArchiveAction(cmXMLWriter& xout, const std::string& configuration);
 
+  void WriteBuildableProductRunnable(cmXMLWriter& xout,
+                                     const cmXCodeObject* xcObj,
+                                     const std::string& container);
   void WriteBuildableReference(cmXMLWriter& xout, const cmXCodeObject* xcObj,
                                const std::string& container);
 
   void WriteCustomWorkingDirectory(cmXMLWriter& xout,
                                    const std::string& configuration);
+
+  void WriteCustomLLDBInitFile(cmXMLWriter& xout,
+                               const std::string& configuration);
 
   std::string WriteVersionString();
   std::string FindConfiguration(const std::string& name);

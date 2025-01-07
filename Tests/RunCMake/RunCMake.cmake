@@ -113,6 +113,9 @@ function(run_cmake test)
     if(RunCMake_TEST_LCC AND NOT RunCMake_TEST_NO_CMP0129)
       list(APPEND RunCMake_TEST_OPTIONS -DCMAKE_POLICY_DEFAULT_CMP0129=NEW)
     endif()
+    if(CMAKE_HOST_SYSTEM_NAME STREQUAL "AIX")
+      list(APPEND RunCMake_TEST_OPTIONS -DCMAKE_POLICY_DEFAULT_CMP0182=NEW)
+    endif()
     if(RunCMake_MAKE_PROGRAM)
       list(APPEND RunCMake_TEST_OPTIONS "-DCMAKE_MAKE_PROGRAM=${RunCMake_MAKE_PROGRAM}")
     endif()
@@ -224,11 +227,12 @@ function(run_cmake test)
     string(REGEX REPLACE [[
 ^CMake Deprecation Warning at [^
 ]*CMakeLists.txt:1 \(cmake_minimum_required\):
-  Compatibility with CMake < 3\.5 will be removed from a future version of
+  Compatibility with CMake < 3\.10 will be removed from a future version of
   CMake.
 
-  Update the VERSION argument <min> value or use a \.\.\.<max> suffix to tell
-  CMake that the project does not need compatibility with older versions\.
+  Update the VERSION argument <min> value\.  Or, use the <min>\.\.\.<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier\.
 +
 ]] "" actual_stderr "${actual_stderr}")
   endif()
@@ -248,6 +252,7 @@ function(run_cmake test)
     endif()
   endforeach()
   unset(RunCMake_TEST_FAILED)
+  unset(RunCMake_TEST_FAILURE_MESSAGE)
   if(RunCMake-check-file AND EXISTS ${top_src}/${RunCMake-check-file})
     include(${top_src}/${RunCMake-check-file})
   else()
@@ -278,6 +283,9 @@ function(run_cmake test)
         string(APPEND msg "Actual ${o}:\n${actual_${o}}\n")
       endif()
     endforeach()
+    if(RunCMake_TEST_FAILURE_MESSAGE)
+      string(APPEND msg "${RunCMake_TEST_FAILURE_MESSAGE}")
+    endif()
     message(SEND_ERROR "${test}${RunCMake_TEST_VARIANT_DESCRIPTION} - FAILED:\n${msg}")
   else()
     message(STATUS "${test}${RunCMake_TEST_VARIANT_DESCRIPTION} - PASSED")

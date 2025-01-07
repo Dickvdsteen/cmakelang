@@ -72,6 +72,9 @@ private:
   void WriteCEDebugProjectConfigurationValues(Elem& e0);
   void WriteMSToolConfigurationValuesManaged(Elem& e1,
                                              std::string const& config);
+  void WriteMSToolConfigurationValuesCommon(Elem& e1,
+                                            std::string const& config);
+  void WriteMSDriverConfigurationValues(Elem& e1, std::string const& config);
   void WriteHeaderSource(Elem& e1, cmSourceFile const* sf,
                          ConfigToSettings const& toolSettings);
   void WriteExtraSource(Elem& e1, cmSourceFile const* sf,
@@ -89,6 +92,7 @@ private:
   void WriteDotNetReference(Elem& e1, std::string const& ref,
                             std::string const& hint,
                             std::string const& config);
+  void WriteFrameworkReferences(Elem& e0);
   void WriteDotNetDocumentationFile(Elem& e0);
   void WriteImports(Elem& e0);
   void WriteDotNetReferenceCustomTags(Elem& e2, std::string const& ref);
@@ -119,6 +123,7 @@ private:
   std::vector<std::string> GetIncludes(std::string const& config,
                                        std::string const& lang) const;
   std::string GetTargetOutputName() const;
+  std::string GetAssemblyName(std::string const& config) const;
 
   bool ComputeClOptions();
   bool ComputeClOptions(std::string const& configName);
@@ -191,6 +196,11 @@ private:
   void WriteEvent(Elem& e1, std::string const& name,
                   std::vector<cmCustomCommand> const& commands,
                   std::string const& configName);
+  void WriteSdkStyleEvents(Elem& e0, std::string const& configName);
+  void WriteSdkStyleEvent(Elem& e0, const std::string& name,
+                          const std::string& when, const std::string& target,
+                          std::vector<cmCustomCommand> const& commands,
+                          std::string const& configName);
   void WriteGroupSources(Elem& e0, std::string const& name,
                          ToolSources const& sources,
                          std::vector<cmSourceGroup>&);
@@ -225,7 +235,7 @@ private:
   std::string LangForClCompile;
 
   VsProjectType ProjectType;
-  bool InSourceBuild;
+  bool InSourceBuild = false;
   std::vector<std::string> Configurations;
   std::vector<TargetsFileAndConfigs> TargetsFileAndConfigsVec;
   cmGeneratorTarget* const GeneratorTarget;
@@ -233,13 +243,15 @@ private:
   std::string const Platform;
   std::string const Name;
   std::string const GUID;
-  bool MSTools;
-  bool Managed;
-  bool NsightTegra;
-  bool Android;
+  bool MSTools = false;
+  bool Managed = false;
+  bool NsightTegra = false;
+  bool Android = false;
+  bool WindowsKernelMode = false;
   bool HaveCustomCommandDepfile = false;
+  std::map<std::string, bool> ScanSourceForModuleDependencies;
   unsigned int NsightTegraVersion[4];
-  bool TargetCompileAsWinRT;
+  bool TargetCompileAsWinRT = false;
   std::set<std::string> IPOEnabledConfigurations;
   std::set<std::string> ASanEnabledConfigurations;
   std::set<std::string> FuzzerEnabledConfigurations;
@@ -247,7 +259,7 @@ private:
   cmGlobalVisualStudio10Generator* const GlobalGenerator;
   cmLocalVisualStudio10Generator* const LocalGenerator;
   std::set<std::string> CSharpCustomCommandNames;
-  bool IsMissingFiles;
+  bool IsMissingFiles = false;
   std::vector<std::string> AddedFiles;
   std::string DefaultArtifactDir;
   bool AddedDefaultCertificate = false;
@@ -278,8 +290,6 @@ private:
 
   void WriteCommonPropertyGroupGlobals(
     cmVisualStudio10TargetGenerator::Elem& e1);
-
-  bool HasCustomCommands() const;
 
   std::unordered_map<std::string, ConfigToSettings> ParsedToolTargetSettings;
   bool PropertyIsSameInAllConfigs(const ConfigToSettings& toolSettings,

@@ -140,8 +140,15 @@ Items containing ``::``, such as ``Foo::Bar``, are assumed to be
 target names and will cause an error if no such target exists.
 See policy :policy:`CMP0028`.
 
+See the :variable:`CMAKE_LINK_LIBRARIES_STRATEGY` variable and
+corresponding :prop_tgt:`LINK_LIBRARIES_STRATEGY` target property
+for details on how CMake orders direct link dependencies on linker
+command lines.
+
 See the :manual:`cmake-buildsystem(7)` manual for more on defining
 buildsystem properties.
+
+.. include:: ../command/LINK_LIBRARIES_LINKER.txt
 
 Libraries for a Target and/or its Dependents
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -153,7 +160,7 @@ Libraries for a Target and/or its Dependents
                        [<PRIVATE|PUBLIC|INTERFACE> <item>...]...)
 
 The ``PUBLIC``, ``PRIVATE`` and ``INTERFACE``
-:ref:`scope <Target Usage Requirements>` keywords can be used to
+:ref:`scope <Target Command Scope>` keywords can be used to
 specify both the link dependencies and the link interface in one command.
 
 Libraries and targets following ``PUBLIC`` are linked to, and are made
@@ -230,6 +237,8 @@ is not ``NEW``, they are also appended to the
 :prop_tgt:`LINK_INTERFACE_LIBRARIES` property.  Libraries specified as
 ``general`` (or without any keyword) are treated as if specified for both
 ``debug`` and ``optimized``.
+
+.. _`Linking Object Libraries`:
 
 Linking Object Libraries
 ^^^^^^^^^^^^^^^^^^^^^^^^

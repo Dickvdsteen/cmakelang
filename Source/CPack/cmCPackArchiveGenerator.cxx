@@ -2,7 +2,6 @@
    file Copyright.txt or https://cmake.org/licensing for details.  */
 #include "cmCPackArchiveGenerator.h"
 
-#include <cstring>
 #include <map>
 #include <ostream>
 #include <unordered_map>
@@ -192,15 +191,16 @@ std::string cmCPackArchiveGenerator::GetArchiveComponentFileName(
   std::string componentUpper(cmSystemTools::UpperCase(component));
   std::string packageFileName;
 
-  if (this->IsSet("CPACK_ARCHIVE_" + componentUpper + "_FILE_NAME")) {
+  if (cmValue v = this->GetOptionIfSet("CPACK_ARCHIVE_" + componentUpper +
+                                       "_FILE_NAME")) {
+    packageFileName += *v;
+  } else if ((v = this->GetOptionIfSet("CPACK_ARCHIVE_FILE_NAME"))) {
     packageFileName +=
-      *this->GetOption("CPACK_ARCHIVE_" + componentUpper + "_FILE_NAME");
-  } else if (this->IsSet("CPACK_ARCHIVE_FILE_NAME")) {
-    packageFileName += this->GetComponentPackageFileName(
-      *this->GetOption("CPACK_ARCHIVE_FILE_NAME"), component, isGroupName);
+      this->GetComponentPackageFileName(*v, component, isGroupName);
   } else {
-    packageFileName += this->GetComponentPackageFileName(
-      *this->GetOption("CPACK_PACKAGE_FILE_NAME"), component, isGroupName);
+    v = this->GetOption("CPACK_PACKAGE_FILE_NAME");
+    packageFileName +=
+      this->GetComponentPackageFileName(*v, component, isGroupName);
   }
 
   packageFileName += this->GetOutputExtension();
@@ -234,14 +234,11 @@ int cmCPackArchiveGenerator::addOneComponentToArchive(
                 "   - packaging component: " << component->Name << std::endl);
   // Add the files of this component to the archive
   std::string localToplevel(this->GetOption("CPACK_TEMPORARY_DIRECTORY"));
-  localToplevel += "/" + component->Name;
+  localToplevel += "/" + this->GetSanitizedDirOrFileName(component->Name);
   // Change to local toplevel
   cmWorkingDirectory workdir(localToplevel);
   if (workdir.Failed()) {
-    cmCPackLogger(cmCPackLog::LOG_ERROR,
-                  "Failed to change working directory to "
-                    << localToplevel << " : "
-                    << std::strerror(workdir.GetLastResult()) << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_ERROR, workdir.GetError() << std::endl);
     return 0;
   }
   std::string filePrefix;
@@ -259,11 +256,11 @@ int cmCPackArchiveGenerator::addOneComponentToArchive(
     std::string rp = filePrefix + file;
 
     DeduplicateStatus status = DeduplicateStatus::Add;
-    if (deduplicator != nullptr) {
+    if (deduplicator) {
       status = deduplicator->IsDeduplicate(rp, localToplevel);
     }
 
-    if (deduplicator == nullptr || status == DeduplicateStatus::Add) {
+    if (!deduplicator || status == DeduplicateStatus::Add) {
       cmCPackLogger(cmCPackLog::LOG_DEBUG, "Adding file: " << rp << std::endl);
       archive.Add(rp, 0, nullptr, false);
     } else if (status == DeduplicateStatus::Error) {
@@ -350,18 +347,14 @@ int cmCPackArchiveGenerator::PackageComponents(bool ignoreGroup)
     // Handle Orphan components (components not belonging to any groups)
     for (auto& comp : this->Components) {
       // Does the component belong to a group?
-      if (comp.second.Group == nullptr) {
+      if (!comp.second.Group) {
         cmCPackLogger(
           cmCPackLog::LOG_VERBOSE,
           "Component <"
             << comp.second.Name
             << "> does not belong to any group, package it separately."
             << std::endl);
-        std::string localToplevel(
-          this->GetOption("CPACK_TEMPORARY_DIRECTORY"));
         std::string packageFileName = std::string(this->toplevel);
-
-        localToplevel += "/" + comp.first;
         packageFileName +=
           "/" + this->GetArchiveComponentFileName(comp.first, false);
 
@@ -379,10 +372,7 @@ int cmCPackArchiveGenerator::PackageComponents(bool ignoreGroup)
   // We build 1 package per component
   else {
     for (auto& comp : this->Components) {
-      std::string localToplevel(this->GetOption("CPACK_TEMPORARY_DIRECTORY"));
       std::string packageFileName = std::string(this->toplevel);
-
-      localToplevel += "/" + comp.first;
       packageFileName +=
         "/" + this->GetArchiveComponentFileName(comp.first, false);
 
@@ -405,10 +395,11 @@ int cmCPackArchiveGenerator::PackageComponentsAllInOne()
   this->packageFileNames.emplace_back(this->toplevel);
   this->packageFileNames[0] += "/";
 
-  if (this->IsSet("CPACK_ARCHIVE_FILE_NAME")) {
-    this->packageFileNames[0] += *this->GetOption("CPACK_ARCHIVE_FILE_NAME");
+  if (cmValue v = this->GetOptionIfSet("CPACK_ARCHIVE_FILE_NAME")) {
+    this->packageFileNames[0] += *v;
   } else {
-    this->packageFileNames[0] += *this->GetOption("CPACK_PACKAGE_FILE_NAME");
+    v = this->GetOption("CPACK_PACKAGE_FILE_NAME");
+    this->packageFileNames[0] += *v;
   }
 
   this->packageFileNames[0] += this->GetOutputExtension();
@@ -455,10 +446,7 @@ int cmCPackArchiveGenerator::PackageFiles()
   DECLARE_AND_OPEN_ARCHIVE(packageFileNames[0], archive);
   cmWorkingDirectory workdir(this->toplevel);
   if (workdir.Failed()) {
-    cmCPackLogger(cmCPackLog::LOG_ERROR,
-                  "Failed to change working directory to "
-                    << this->toplevel << " : "
-                    << std::strerror(workdir.GetLastResult()) << std::endl);
+    cmCPackLogger(cmCPackLog::LOG_ERROR, workdir.GetError() << std::endl);
     return 0;
   }
   for (std::string const& file : this->files) {
@@ -495,10 +483,10 @@ int cmCPackArchiveGenerator::GetThreadCount() const
   int threads = 1;
 
   // CPACK_ARCHIVE_THREADS overrides CPACK_THREADS
-  if (this->IsSet("CPACK_ARCHIVE_THREADS")) {
-    threads = std::stoi(*this->GetOption("CPACK_ARCHIVE_THREADS"));
-  } else if (this->IsSet("CPACK_THREADS")) {
-    threads = std::stoi(*this->GetOption("CPACK_THREADS"));
+  if (cmValue v = this->GetOptionIfSet("CPACK_ARCHIVE_THREADS")) {
+    threads = std::stoi(*v);
+  } else if (cmValue v2 = this->GetOptionIfSet("CPACK_THREADS")) {
+    threads = std::stoi(*v2);
   }
 
   return threads;

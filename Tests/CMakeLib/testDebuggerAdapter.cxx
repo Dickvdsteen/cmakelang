@@ -3,11 +3,9 @@
 
 #include <chrono>
 #include <cstdio>
-#include <functional>
 #include <future>
 #include <memory>
 #include <string>
-#include <vector>
 
 #include <cm3p/cppdap/future.h>
 #include <cm3p/cppdap/io.h>
@@ -134,6 +132,7 @@ bool runTest(std::function<bool(dap::Session&)> onThreadExitedEvent)
   ASSERT_TRUE(initializeResponse.response.supportsExceptionInfoRequest);
   ASSERT_TRUE(
     initializeResponse.response.exceptionBreakpointFilters.has_value());
+  ASSERT_TRUE(initializeResponse.response.supportsValueFormattingOptions);
 
   dap::LaunchRequest launchRequest;
   auto launchResponse = client->send(launchRequest).get();
@@ -194,8 +193,6 @@ bool testThreadsRequestAfterThreadExitedEvent()
 
 int testDebuggerAdapter(int, char*[])
 {
-  return runTests(std::vector<std::function<bool()>>{
-    testBasicProtocol,
-    testThreadsRequestAfterThreadExitedEvent,
-  });
+  return runTests(
+    { testBasicProtocol, testThreadsRequestAfterThreadExitedEvent });
 }

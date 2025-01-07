@@ -20,6 +20,8 @@ Environment Variables that Change Behavior
 .. toctree::
    :maxdepth: 1
 
+   /envvar/CLICOLOR
+   /envvar/CLICOLOR_FORCE
    /envvar/CMAKE_APPBUNDLE_PATH
    /envvar/CMAKE_FRAMEWORK_PATH
    /envvar/CMAKE_INCLUDE_PATH
@@ -27,6 +29,8 @@ Environment Variables that Change Behavior
    /envvar/CMAKE_MAXIMUM_RECURSION_DEPTH
    /envvar/CMAKE_PREFIX_PATH
    /envvar/CMAKE_PROGRAM_PATH
+   /envvar/CMAKE_TLS_VERIFY
+   /envvar/CMAKE_TLS_VERSION
    /envvar/SSL_CERT_DIR
    /envvar/SSL_CERT_FILE
 
@@ -41,15 +45,18 @@ Environment Variables that Control the Build
    /envvar/CMAKE_BUILD_PARALLEL_LEVEL
    /envvar/CMAKE_BUILD_TYPE
    /envvar/CMAKE_COLOR_DIAGNOSTICS
-   /envvar/CMAKE_CONFIGURATION_TYPES
+   /envvar/CMAKE_CONFIG_DIR
    /envvar/CMAKE_CONFIG_TYPE
+   /envvar/CMAKE_CONFIGURATION_TYPES
    /envvar/CMAKE_CROSSCOMPILING_EMULATOR
+   /envvar/CMAKE_EXPORT_BUILD_DATABASE
    /envvar/CMAKE_EXPORT_COMPILE_COMMANDS
    /envvar/CMAKE_GENERATOR
    /envvar/CMAKE_GENERATOR_INSTANCE
    /envvar/CMAKE_GENERATOR_PLATFORM
    /envvar/CMAKE_GENERATOR_TOOLSET
    /envvar/CMAKE_INSTALL_MODE
+   /envvar/CMAKE_INSTALL_PARALLEL_LEVEL
    /envvar/CMAKE_INSTALL_PREFIX
    /envvar/CMAKE_LANG_COMPILER_LAUNCHER
    /envvar/CMAKE_LANG_IMPLICIT_LINK_DIRECTORIES_EXCLUDE
@@ -90,7 +97,9 @@ Environment Variables for Languages
    /envvar/ISPC
    /envvar/ISPCFLAGS
    /envvar/OBJC
+   /envvar/OBJCFLAGS
    /envvar/OBJCXX
+   /envvar/OBJCXXFLAGS
    /envvar/RC
    /envvar/RCFLAGS
    /envvar/SWIFTC

@@ -271,6 +271,11 @@ Dependency Providers
   :command:`project`.  Calling ``cmake_language(SET_DEPENDENCY_PROVIDER)``
   outside of that context will result in an error.
 
+  .. versionadded:: 3.30
+    The :prop_gbl:`PROPAGATE_TOP_LEVEL_INCLUDES_TO_TRY_COMPILE` global
+    property can be set if the dependency provider also wants to be enabled
+    in whole-project calls to :command:`try_compile`.
+
   .. note::
     The choice of dependency provider should always be under the user's control.
     As a convenience, a project may choose to provide a file that users can
@@ -519,8 +524,13 @@ Terminating Scripts
   Terminate the current :option:`cmake -P` script and exit with ``<exit-code>``.
 
   This command works only in :ref:`script mode <Script Processing Mode>`.
+  If used outside of that context, it will cause a fatal error.
 
   The ``<exit-code>`` should be non-negative.
-  If ``<exit-code>`` is negative then the behavior
+  If ``<exit-code>`` is negative, then the behavior
   is unspecified (e.g., on Windows the error code -1
-  becomes ``0xffffffff``, and on Linux it becomes ``255``).
+  becomes ``0xffffffff``, and on Linux it becomes 255).
+  Exit codes above 255 may not be supported by the underlying
+  shell or platform, and some shells may interpret values
+  above 125 specially.  Therefore, it is advisable to only
+  specify an ``<exit-code>`` in the range 0 to 125.

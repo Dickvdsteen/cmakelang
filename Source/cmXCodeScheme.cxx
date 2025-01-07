@@ -77,7 +77,7 @@ void cmXCodeScheme::WriteXCodeXCScheme(std::ostream& fout,
   WriteBuildAction(xout, container);
   WriteTestAction(xout, FindConfiguration("Debug"), container);
   WriteLaunchAction(xout, FindConfiguration(launchConfiguration), container);
-  WriteProfileAction(xout, FindConfiguration("Release"));
+  WriteProfileAction(xout, FindConfiguration("Release"), container);
   WriteAnalyzeAction(xout, FindConfiguration("Debug"));
   WriteArchiveAction(xout, FindConfiguration("Release"));
 
@@ -120,6 +120,7 @@ void cmXCodeScheme::WriteTestAction(cmXMLWriter& xout,
   xout.Attribute("selectedLauncherIdentifier",
                  "Xcode.DebuggerFoundation.Launcher.LLDB");
   xout.Attribute("shouldUseLaunchSchemeArgsEnv", "YES");
+  WriteCustomLLDBInitFile(xout, configuration);
 
   xout.StartElement("Testables");
   for (auto const* test : this->Tests) {
@@ -164,6 +165,7 @@ void cmXCodeScheme::WriteLaunchAction(cmXMLWriter& xout,
     xout.Attribute("launchStyle", value);
   }
   WriteCustomWorkingDirectory(xout, configuration);
+  WriteCustomLLDBInitFile(xout, configuration);
 
   xout.Attribute("ignoresPersistentStateOnLaunch", "NO");
   WriteLaunchActionBooleanAttribute(xout, "debugDocumentVersioning",
@@ -240,17 +242,12 @@ void cmXCodeScheme::WriteLaunchAction(cmXMLWriter& xout,
   // Diagnostics tab end
 
   if (IsExecutable(this->Target)) {
-    xout.StartElement("BuildableProductRunnable");
-    xout.BreakAttributes();
-    xout.Attribute("runnableDebuggingMode", "0");
-
+    WriteBuildableProductRunnable(xout, this->Target, container);
   } else {
     xout.StartElement("MacroExpansion");
+    WriteBuildableReference(xout, this->Target, container);
+    xout.EndElement();
   }
-
-  WriteBuildableReference(xout, this->Target, container);
-
-  xout.EndElement(); // MacroExpansion
 
   // Info tab begin
 
@@ -374,7 +371,7 @@ bool cmXCodeScheme::WriteLaunchActionBooleanAttribute(
   bool defaultValue)
 {
   cmValue property = Target->GetTarget()->GetProperty(varName);
-  bool isOn = (!property && defaultValue) || cmIsOn(property);
+  bool isOn = (!property && defaultValue) || property.IsOn();
 
   if (isOn) {
     xout.Attribute(attrName.c_str(), "YES");
@@ -404,7 +401,8 @@ bool cmXCodeScheme::WriteLaunchActionAdditionalOption(
 }
 
 void cmXCodeScheme::WriteProfileAction(cmXMLWriter& xout,
-                                       const std::string& configuration)
+                                       const std::string& configuration,
+                                       const std::string& container)
 {
   xout.StartElement("ProfileAction");
   xout.BreakAttributes();
@@ -415,6 +413,11 @@ void cmXCodeScheme::WriteProfileAction(cmXMLWriter& xout,
   WriteLaunchActionBooleanAttribute(xout, "debugDocumentVersioning",
                                     "XCODE_SCHEME_DEBUG_DOCUMENT_VERSIONING",
                                     true);
+
+  if (IsExecutable(this->Target)) {
+    WriteBuildableProductRunnable(xout, this->Target, container);
+  }
+
   xout.EndElement();
 }
 
@@ -434,6 +437,17 @@ void cmXCodeScheme::WriteArchiveAction(cmXMLWriter& xout,
   xout.BreakAttributes();
   xout.Attribute("buildConfiguration", configuration);
   xout.Attribute("revealArchiveInOrganizer", "YES");
+  xout.EndElement();
+}
+
+void cmXCodeScheme::WriteBuildableProductRunnable(cmXMLWriter& xout,
+                                                  const cmXCodeObject* xcObj,
+                                                  const std::string& container)
+{
+  xout.StartElement("BuildableProductRunnable");
+  xout.BreakAttributes();
+  xout.Attribute("runnableDebuggingMode", "0");
+  WriteBuildableReference(xout, xcObj, container);
   xout.EndElement();
 }
 
@@ -466,6 +480,18 @@ void cmXCodeScheme::WriteCustomWorkingDirectory(
     auto customWorkingDirectory = cmGeneratorExpression::Evaluate(
       propertyValue, this->LocalGenerator, configuration);
     xout.Attribute("customWorkingDirectory", customWorkingDirectory);
+  }
+}
+
+void cmXCodeScheme::WriteCustomLLDBInitFile(cmXMLWriter& xout,
+                                            const std::string& configuration)
+{
+  std::string const& propertyValue =
+    this->Target->GetTarget()->GetSafeProperty("XCODE_SCHEME_LLDB_INIT_FILE");
+  if (!propertyValue.empty()) {
+    auto customLLDBInitFile = cmGeneratorExpression::Evaluate(
+      propertyValue, this->LocalGenerator, configuration);
+    xout.Attribute("customLLDBInitFile", customLLDBInitFile);
   }
 }
 

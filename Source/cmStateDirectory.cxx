@@ -21,7 +21,6 @@
 #include "cmState.h"
 #include "cmStatePrivate.h"
 #include "cmStateTypes.h"
-#include "cmSystemTools.h"
 #include "cmValue.h"
 
 static std::string const kBINARY_DIR = "BINARY_DIR";
@@ -36,11 +35,9 @@ std::string const& cmStateDirectory::GetCurrentSource() const
 
 void cmStateDirectory::SetCurrentSource(std::string const& dir)
 {
-  std::string& loc = this->DirectoryState->Location;
-  loc = dir;
-  cmSystemTools::ConvertToUnixSlashes(loc);
-  loc = cmSystemTools::CollapseFullPath(loc);
-  this->Snapshot_.SetDefinition("CMAKE_CURRENT_SOURCE_DIR", loc);
+  this->DirectoryState->Location = dir;
+  this->Snapshot_.SetDefinition("CMAKE_CURRENT_SOURCE_DIR",
+                                this->DirectoryState->Location);
 }
 
 std::string const& cmStateDirectory::GetCurrentBinary() const
@@ -50,11 +47,9 @@ std::string const& cmStateDirectory::GetCurrentBinary() const
 
 void cmStateDirectory::SetCurrentBinary(std::string const& dir)
 {
-  std::string& loc = this->DirectoryState->OutputLocation;
-  loc = dir;
-  cmSystemTools::ConvertToUnixSlashes(loc);
-  loc = cmSystemTools::CollapseFullPath(loc);
-  this->Snapshot_.SetDefinition("CMAKE_CURRENT_BINARY_DIR", loc);
+  this->DirectoryState->OutputLocation = dir;
+  this->Snapshot_.SetDefinition("CMAKE_CURRENT_BINARY_DIR",
+                                this->DirectoryState->OutputLocation);
 }
 
 cmStateDirectory::cmStateDirectory(
@@ -451,7 +446,7 @@ cmValue cmStateDirectory::GetProperty(const std::string& prop,
 
 bool cmStateDirectory::GetPropertyAsBool(const std::string& prop) const
 {
-  return cmIsOn(this->GetProperty(prop));
+  return this->GetProperty(prop).IsOn();
 }
 
 std::vector<std::string> cmStateDirectory::GetPropertyKeys() const

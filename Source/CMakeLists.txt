@@ -121,6 +121,8 @@ add_library(
   cmBinUtilsWindowsPELinker.h
   cmBinUtilsWindowsPEObjdumpGetRuntimeDependenciesTool.cxx
   cmBinUtilsWindowsPEObjdumpGetRuntimeDependenciesTool.h
+  cmBuildDatabase.cxx
+  cmBuildDatabase.h
   cmBuildOptions.h
   cmCacheManager.cxx
   cmCacheManager.h
@@ -140,6 +142,7 @@ add_library(
   cmCMakePresetsGraphReadJSONTestPresets.cxx
   cmCMakePresetsGraphReadJSONWorkflowPresets.cxx
   cmCommandArgumentParserHelper.cxx
+  cmCommandLineArgument.h
   cmCommonTargetGenerator.cxx
   cmCommonTargetGenerator.h
   cmComputeComponentGraph.cxx
@@ -199,16 +202,28 @@ add_library(
   cmEvaluatedTargetProperty.cxx
   cmEvaluatedTargetProperty.h
   cmExprParserHelper.cxx
+  cmExportAndroidMKGenerator.h
+  cmExportAndroidMKGenerator.cxx
   cmExportBuildAndroidMKGenerator.h
   cmExportBuildAndroidMKGenerator.cxx
+  cmExportBuildCMakeConfigGenerator.h
+  cmExportBuildCMakeConfigGenerator.cxx
   cmExportBuildFileGenerator.h
   cmExportBuildFileGenerator.cxx
+  cmExportCMakeConfigGenerator.h
+  cmExportCMakeConfigGenerator.cxx
   cmExportFileGenerator.h
   cmExportFileGenerator.cxx
   cmExportInstallAndroidMKGenerator.h
   cmExportInstallAndroidMKGenerator.cxx
+  cmExportInstallCMakeConfigGenerator.h
+  cmExportInstallCMakeConfigGenerator.cxx
   cmExportInstallFileGenerator.h
   cmExportInstallFileGenerator.cxx
+  cmExportInstallPackageInfoGenerator.h
+  cmExportInstallPackageInfoGenerator.cxx
+  cmExportPackageInfoGenerator.h
+  cmExportPackageInfoGenerator.cxx
   cmExportTryCompileFileGenerator.h
   cmExportTryCompileFileGenerator.cxx
   cmExportSet.h
@@ -285,6 +300,14 @@ add_library(
   cmGeneratorExpression.h
   cmGeneratorTarget.cxx
   cmGeneratorTarget.h
+  cmGeneratorTarget_CompatibleInterface.cxx
+  cmGeneratorTarget_IncludeDirectories.cxx
+  cmGeneratorTarget_Link.cxx
+  cmGeneratorTarget_LinkDirectories.cxx
+  cmGeneratorTarget_Options.cxx
+  cmGeneratorTarget_Sources.cxx
+  cmGeneratorTarget_TargetPropertyEntry.cxx
+  cmGeneratorTarget_TransitiveProperty.cxx
   cmLinkItemGraphVisitor.cxx
   cmLinkItemGraphVisitor.h
   cmGetPipes.cxx
@@ -303,6 +326,10 @@ add_library(
   cmGraphVizWriter.h
   cmImportedCxxModuleInfo.cxx
   cmImportedCxxModuleInfo.h
+  cmInstallAndroidMKExportGenerator.cxx
+  cmInstallAndroidMKExportGenerator.h
+  cmInstallCMakeConfigExportGenerator.cxx
+  cmInstallCMakeConfigExportGenerator.h
   cmInstallGenerator.h
   cmInstallGenerator.cxx
   cmInstallGetRuntimeDependenciesGenerator.h
@@ -316,6 +343,8 @@ add_library(
   cmInstallFilesGenerator.cxx
   cmInstallImportedRuntimeArtifactsGenerator.h
   cmInstallImportedRuntimeArtifactsGenerator.cxx
+  cmInstallPackageInfoExportGenerator.h
+  cmInstallPackageInfoExportGenerator.cxx
   cmInstallRuntimeDependencySet.h
   cmInstallRuntimeDependencySet.cxx
   cmInstallRuntimeDependencySetGenerator.h
@@ -328,6 +357,8 @@ add_library(
   cmInstallTargetGenerator.cxx
   cmInstallDirectoryGenerator.h
   cmInstallDirectoryGenerator.cxx
+  cmInstallScriptHandler.h
+  cmInstallScriptHandler.cxx
   cmJSONHelpers.cxx
   cmJSONHelpers.h
   cmJSONState.cxx
@@ -351,6 +382,10 @@ add_library(
   cmLocalCommonGenerator.h
   cmLocalGenerator.cxx
   cmLocalGenerator.h
+  cmPkgConfigParser.cxx
+  cmPkgConfigParser.h
+  cmPkgConfigResolver.cxx
+  cmPkgConfigResolver.h
   cmPlaceholderExpander.cxx
   cmPlaceholderExpander.h
   cmRulePlaceholderExpander.cxx
@@ -377,6 +412,10 @@ add_library(
   cmNewLineStyle.cxx
   cmOrderDirectories.cxx
   cmOrderDirectories.h
+  cmPackageInfoReader.cxx
+  cmPackageInfoReader.h
+  cmPathResolver.cxx
+  cmPathResolver.h
   cmPlistParser.cxx
   cmPlistParser.h
   cmPolicies.h
@@ -437,6 +476,8 @@ add_library(
   cmTargetPropertyComputer.cxx
   cmTargetPropertyComputer.h
   cmTargetExport.h
+  cmTargetTraceDependencies.cxx
+  cmTargetTraceDependencies.h
   cmTest.cxx
   cmTest.h
   cmTestGenerator.cxx
@@ -471,8 +512,6 @@ add_library(
   cmake.cxx
   cmake.h
 
-  cmCommand.cxx
-  cmCommand.h
   cmCommands.cxx
   cmCommands.h
   cmAddCompileDefinitionsCommand.cxx
@@ -513,6 +552,8 @@ add_library(
   cmCMakeMinimumRequired.h
   cmCMakePathCommand.h
   cmCMakePathCommand.cxx
+  cmCMakePkgConfigCommand.h
+  cmCMakePkgConfigCommand.cxx
   cmCMakePolicyCommand.cxx
   cmCMakePolicyCommand.h
   cmConditionEvaluator.cxx
@@ -547,6 +588,8 @@ add_library(
   cmFLTKWrapUICommand.h
   cmFileCommand.cxx
   cmFileCommand.h
+  cmFileCommand_ReadMacho.cxx
+  cmFileCommand_ReadMacho.h
   cmFindBase.cxx
   cmFindBase.h
   cmFindCommon.cxx
@@ -778,6 +821,7 @@ target_link_libraries(
     LibUV::LibUV
     Threads::Threads
     ZLIB::ZLIB
+    llpkgc::llpkgc
   )
 
 if(CMake_ENABLE_DEBUGGER)
@@ -886,8 +930,6 @@ if(WIN32)
         cmGlobalVisualStudio7Generator.h
         cmGlobalVisualStudio8Generator.cxx
         cmGlobalVisualStudio8Generator.h
-        cmGlobalVisualStudio9Generator.cxx
-        cmGlobalVisualStudio9Generator.h
         cmVisualStudioGeneratorOptions.h
         cmVisualStudioGeneratorOptions.cxx
         cmVsProjectType.h
@@ -1031,9 +1073,10 @@ add_library(
   cmCTest.cxx
   CTest/cmProcess.cxx
   CTest/cmCTestBinPacker.cxx
-  CTest/cmCTestBuildAndTestHandler.cxx
+  CTest/cmCTestBuildAndTest.cxx
   CTest/cmCTestBuildCommand.cxx
   CTest/cmCTestBuildHandler.cxx
+  CTest/cmCTestCommand.cxx
   CTest/cmCTestConfigureCommand.cxx
   CTest/cmCTestConfigureHandler.cxx
   CTest/cmCTestCoverageCommand.cxx
@@ -1069,10 +1112,9 @@ add_library(
   CTest/cmCTestTestCommand.cxx
   CTest/cmCTestTestHandler.cxx
   CTest/cmCTestTestMeasurementXMLParser.cxx
+  CTest/cmCTestTypes.cxx
   CTest/cmCTestUpdateCommand.cxx
-  CTest/cmCTestUpdateHandler.cxx
   CTest/cmCTestUploadCommand.cxx
-  CTest/cmCTestUploadHandler.cxx
 
   CTest/cmCTestVC.cxx
   CTest/cmCTestVC.h

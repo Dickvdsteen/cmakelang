@@ -165,12 +165,11 @@ void cmStateSnapshot::SetPolicy(cmPolicies::PolicyID id,
 cmPolicies::PolicyStatus cmStateSnapshot::GetPolicy(cmPolicies::PolicyID id,
                                                     bool parent_scope) const
 {
-  cmPolicies::PolicyStatus status = cmPolicies::GetPolicyStatus(id);
-
-  if (status == cmPolicies::REQUIRED_ALWAYS ||
-      status == cmPolicies::REQUIRED_IF_USED) {
-    return status;
+  if (cmPolicies::IsRemoved(id)) {
+    return cmPolicies::NEW;
   }
+
+  cmPolicies::PolicyStatus status = cmPolicies::WARN;
 
   cmLinkedTree<cmStateDetail::BuildsystemDirectoryStateType>::iterator dir =
     this->Position->BuildSystemDirectory;
@@ -298,9 +297,11 @@ void cmStateSnapshot::SetDefaultDefinitions()
   if (hostSystemName == "Windows") {
     this->SetDefinition("WIN32", "1");
     this->SetDefinition("CMAKE_HOST_WIN32", "1");
+    this->SetDefinition("CMAKE_HOST_EXECUTABLE_SUFFIX", ".exe");
   } else {
     this->SetDefinition("UNIX", "1");
     this->SetDefinition("CMAKE_HOST_UNIX", "1");
+    this->SetDefinition("CMAKE_HOST_EXECUTABLE_SUFFIX", "");
   }
 #if defined(__APPLE__)
   this->SetDefinition("APPLE", "1");

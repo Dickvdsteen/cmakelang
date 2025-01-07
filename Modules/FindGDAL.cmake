@@ -7,6 +7,12 @@ FindGDAL
 
 Find Geospatial Data Abstraction Library (GDAL).
 
+.. deprecated:: 3.32
+  GDAL 3.5 and above provide a ``GDALConfig.cmake`` package configuration file.
+  Call ``find_package(GDAL CONFIG)`` to find it directly and avoid using this
+  find module.  For further details, see `GDAL's documentation on CMake
+  integration <https://gdal.org/en/latest/development/cmake.html>`_.
+
 IMPORTED Targets
 ^^^^^^^^^^^^^^^^
 
@@ -71,6 +77,9 @@ The following variables may be set to modify the search strategy:
 # This makes the presumption that you are include gdal.h like
 #
 #include "gdal.h"
+
+cmake_policy(PUSH)
+cmake_policy(SET CMP0159 NEW) # file(STRINGS) with REGEX updates CMAKE_MATCH_<n>
 
 find_path(GDAL_INCLUDE_DIR gdal.h
   HINTS
@@ -181,6 +190,18 @@ else ()
     set(GDAL_VERSION GDAL_VERSION-NOTFOUND)
 endif ()
 
+if (GDAL_FIND_VERSION VERSION_GREATER_EQUAL 3.5)
+   message(DEPRECATION
+     "The FindGDAL module is deprecated.  "
+     "GDAL 3.5 and above provide a CMake package configuration file.  "
+     "Since at least version ${GDAL_FIND_VERSION} is requested, this "
+     "project can be ported to find GDAL's CMake package directly:\n"
+     "  find_package(GDAL CONFIG)\n"
+     "For further details, see:\n"
+     "  https://gdal.org/en/latest/development/cmake.html\n"
+   )
+endif()
+
 include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
 FIND_PACKAGE_HANDLE_STANDARD_ARGS(GDAL
     VERSION_VAR GDAL_VERSION
@@ -197,3 +218,5 @@ if (GDAL_FOUND)
             INTERFACE_INCLUDE_DIRECTORIES "${GDAL_INCLUDE_DIR}")
     endif ()
 endif ()
+
+cmake_policy(POP)

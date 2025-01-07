@@ -17,7 +17,9 @@
 #include "cmArgumentParserTypes.h"
 #include "cmCryptoHash.h"
 #include "cmExecutionStatus.h"
+#include "cmExperimental.h"
 #include "cmExportBuildAndroidMKGenerator.h"
+#include "cmExportBuildCMakeConfigGenerator.h"
 #include "cmExportBuildFileGenerator.h"
 #include "cmExportSet.h"
 #include "cmGeneratedFileStream.h"
@@ -83,12 +85,20 @@ bool cmExportCommand(std::vector<std::string> const& args,
       .Bind("CXX_MODULES_DIRECTORY"_s, &Arguments::CxxModulesDirectory);
 
   if (args[0] == "EXPORT") {
-    parser.Bind("EXPORT"_s, &Arguments::ExportSetName)
-      .Bind("EXPORT_PACKAGE_DEPENDENCIES"_s,
-            &Arguments::ExportPackageDependencies);
+    parser.Bind("EXPORT"_s, &Arguments::ExportSetName);
+    if (cmExperimental::HasSupportEnabled(
+          status.GetMakefile(),
+          cmExperimental::Feature::ExportPackageDependencies)) {
+      parser.Bind("EXPORT_PACKAGE_DEPENDENCIES"_s,
+                  &Arguments::ExportPackageDependencies);
+    }
   } else if (args[0] == "SETUP") {
     parser.Bind("SETUP"_s, &Arguments::ExportSetName);
-    parser.Bind("PACKAGE_DEPENDENCY"_s, &Arguments::PackageDependencyArgs);
+    if (cmExperimental::HasSupportEnabled(
+          status.GetMakefile(),
+          cmExperimental::Feature::ExportPackageDependencies)) {
+      parser.Bind("PACKAGE_DEPENDENCY"_s, &Arguments::PackageDependencyArgs);
+    }
     parser.Bind("TARGET"_s, &Arguments::TargetArgs);
   } else {
     parser.Bind("TARGETS"_s, &Arguments::Targets);
@@ -287,7 +297,7 @@ bool cmExportCommand(std::vector<std::string> const& args,
   // if cmExportBuildFileGenerator is already defined for the file
   // and APPEND is not specified, if CMP0103 is OLD ignore previous definition
   // else raise an error
-  if (gg->GetExportedTargetsFile(fname) != nullptr) {
+  if (gg->GetExportedTargetsFile(fname)) {
     switch (mf.GetPolicyStatus(cmPolicies::CMP0103)) {
       case cmPolicies::WARN:
         mf.IssueMessage(
@@ -309,21 +319,24 @@ bool cmExportCommand(std::vector<std::string> const& args,
   // Setup export file generation.
   std::unique_ptr<cmExportBuildFileGenerator> ebfg = nullptr;
   if (android) {
-    ebfg = cm::make_unique<cmExportBuildAndroidMKGenerator>();
+    auto ebag = cm::make_unique<cmExportBuildAndroidMKGenerator>();
+    ebag->SetAppendMode(arguments.Append);
+    ebfg = std::move(ebag);
   } else {
-    ebfg = cm::make_unique<cmExportBuildFileGenerator>();
+    auto ebcg = cm::make_unique<cmExportBuildCMakeConfigGenerator>();
+    ebcg->SetAppendMode(arguments.Append);
+    ebcg->SetExportOld(arguments.ExportOld);
+    ebcg->SetExportPackageDependencies(arguments.ExportPackageDependencies);
+    ebfg = std::move(ebcg);
   }
   ebfg->SetExportFile(fname.c_str());
   ebfg->SetNamespace(arguments.Namespace);
   ebfg->SetCxxModuleDirectory(arguments.CxxModulesDirectory);
-  ebfg->SetAppendMode(arguments.Append);
-  if (exportSet != nullptr) {
+  if (exportSet) {
     ebfg->SetExportSet(exportSet);
   } else {
     ebfg->SetTargets(targets);
   }
-  ebfg->SetExportOld(arguments.ExportOld);
-  ebfg->SetExportPackageDependencies(arguments.ExportPackageDependencies);
 
   // Compute the set of configurations exported.
   std::vector<std::string> configurationTypes =
@@ -332,7 +345,7 @@ bool cmExportCommand(std::vector<std::string> const& args,
   for (std::string const& ct : configurationTypes) {
     ebfg->AddConfiguration(ct);
   }
-  if (exportSet != nullptr) {
+  if (exportSet) {
     gg->AddBuildExportExportSet(ebfg.get());
   } else {
     gg->AddBuildExportSet(ebfg.get());
@@ -392,8 +405,6 @@ static bool HandlePackage(std::vector<std::string> const& args,
         return true;
       }
       break;
-    case cmPolicies::REQUIRED_IF_USED:
-    case cmPolicies::REQUIRED_ALWAYS:
     case cmPolicies::NEW:
       // Default is to not export, but can be enabled.
       if (!mf.IsOn("CMAKE_EXPORT_PACKAGE_REGISTRY")) {

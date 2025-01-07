@@ -50,9 +50,20 @@ cmLocalNinjaGenerator::cmLocalNinjaGenerator(cmGlobalGenerator* gg,
 // Virtual public methods.
 
 std::unique_ptr<cmRulePlaceholderExpander>
-cmLocalNinjaGenerator::CreateRulePlaceholderExpander() const
+cmLocalNinjaGenerator::CreateRulePlaceholderExpander(
+  cmBuildStep buildStep) const
 {
-  auto ret = this->cmLocalGenerator::CreateRulePlaceholderExpander();
+  auto ret = this->cmLocalGenerator::CreateRulePlaceholderExpander(buildStep);
+  ret->SetTargetImpLib("$TARGET_IMPLIB");
+  return std::unique_ptr<cmRulePlaceholderExpander>(std::move(ret));
+}
+std::unique_ptr<cmRulePlaceholderExpander>
+cmLocalNinjaGenerator::CreateRulePlaceholderExpander(
+  cmBuildStep buildStep, cmGeneratorTarget const* target,
+  std::string const& language)
+{
+  auto ret = this->cmLocalGenerator::CreateRulePlaceholderExpander(
+    buildStep, target, language);
   ret->SetTargetImpLib("$TARGET_IMPLIB");
   return std::unique_ptr<cmRulePlaceholderExpander>(std::move(ret));
 }
@@ -272,8 +283,10 @@ void cmLocalNinjaGenerator::WriteBuildFileTop()
 void cmLocalNinjaGenerator::WriteProjectHeader(std::ostream& os)
 {
   cmGlobalNinjaGenerator::WriteDivider(os);
-  os << "# Project: " << this->GetProjectName() << '\n'
-     << "# Configurations: " << cmJoin(this->GetConfigNames(), ", ") << '\n';
+  os << "# Project: " << this->GetProjectName()
+     << "\n"
+        "# Configurations: "
+     << cmJoin(this->GetConfigNames(), ", ") << '\n';
   cmGlobalNinjaGenerator::WriteDivider(os);
 }
 
@@ -349,7 +362,7 @@ void cmLocalNinjaGenerator::WriteNinjaFilesInclusionConfig(std::ostream& os)
   std::string const commonFilePath = ng->EncodePath(ninjaCommonFile);
   cmGlobalNinjaGenerator::WriteInclude(os, commonFilePath,
                                        "Include common file.");
-  os << "\n";
+  os << '\n';
 }
 
 void cmLocalNinjaGenerator::WriteNinjaFilesInclusionCommon(std::ostream& os)
@@ -362,7 +375,7 @@ void cmLocalNinjaGenerator::WriteNinjaFilesInclusionCommon(std::ostream& os)
   std::string const rulesFilePath = ng->EncodePath(ninjaRulesFile);
   cmGlobalNinjaGenerator::WriteInclude(os, rulesFilePath,
                                        "Include rules file.");
-  os << "\n";
+  os << '\n';
 }
 
 void cmLocalNinjaGenerator::WriteNinjaWorkDir(std::ostream& os)
@@ -380,8 +393,8 @@ void cmLocalNinjaGenerator::WriteProcessedMakefile(std::ostream& os)
 {
   cmGlobalNinjaGenerator::WriteDivider(os);
   os << "# Write statements declared in CMakeLists.txt:\n"
-     << "# " << this->Makefile->GetSafeDefinition("CMAKE_CURRENT_LIST_FILE")
-     << '\n';
+        "# "
+     << this->Makefile->GetSafeDefinition("CMAKE_CURRENT_LIST_FILE") << '\n';
   if (this->IsRootMakefile()) {
     os << "# Which is the root file.\n";
   }
@@ -719,8 +732,6 @@ void cmLocalNinjaGenerator::WriteCustomCommandBuildStatement(
             CM_FALLTHROUGH;
           case cmPolicies::OLD:
             break;
-          case cmPolicies::REQUIRED_IF_USED:
-          case cmPolicies::REQUIRED_ALWAYS:
           case cmPolicies::NEW:
             depfile = ccg.GetInternalDepfile();
             break;
@@ -743,8 +754,6 @@ void cmLocalNinjaGenerator::WriteCustomCommandBuildStatement(
 bool cmLocalNinjaGenerator::HasUniqueByproducts(
   std::vector<std::string> const& byproducts, cmListFileBacktrace const& bt)
 {
-  std::vector<std::string> configs =
-    this->GetMakefile()->GetGeneratorConfigs(cmMakefile::IncludeEmptyConfig);
   cmGeneratorExpression ge(*this->GetCMakeInstance(), bt);
   for (std::string const& p : byproducts) {
     if (cmGeneratorExpression::Find(p) == std::string::npos) {
@@ -752,7 +761,7 @@ bool cmLocalNinjaGenerator::HasUniqueByproducts(
     }
     std::set<std::string> seen;
     std::unique_ptr<cmCompiledGeneratorExpression> cge = ge.Parse(p);
-    for (std::string const& config : configs) {
+    for (std::string const& config : this->GetConfigNames()) {
       for (std::string const& b :
            this->ExpandCustomCommandOutputPaths(*cge, config)) {
         if (!seen.insert(b).second) {
@@ -800,8 +809,7 @@ std::string cmLocalNinjaGenerator::CreateUtilityOutput(
   std::string const base = cmStrCat(this->GetCurrentBinaryDirectory(),
                                     "/CMakeFiles/", targetName, '-');
   // The output is not actually created so mark it symbolic.
-  for (std::string const& config :
-       this->Makefile->GetGeneratorConfigs(cmMakefile::IncludeEmptyConfig)) {
+  for (std::string const& config : this->GetConfigNames()) {
     std::string const force = cmStrCat(base, config);
     if (cmSourceFile* sf = this->Makefile->GetOrCreateGeneratedSource(force)) {
       sf->SetProperty("SYMBOLIC", "1");
@@ -825,8 +833,6 @@ cmLocalNinjaGenerator::MakeCustomCommandGenerators(
       CM_FALLTHROUGH;
     case cmPolicies::OLD:
       break;
-    case cmPolicies::REQUIRED_IF_USED:
-    case cmPolicies::REQUIRED_ALWAYS:
     case cmPolicies::NEW:
       transformDepfile = true;
       break;

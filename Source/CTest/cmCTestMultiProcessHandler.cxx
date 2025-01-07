@@ -8,7 +8,6 @@
 #include <cmath>
 #include <cstddef> // IWYU pragma: keep
 #include <cstdlib>
-#include <cstring>
 #include <iomanip>
 #include <iostream>
 #include <list>
@@ -43,6 +42,17 @@
 #include "cmUVJobServerClient.h"
 #include "cmWorkingDirectory.h"
 
+namespace {
+// For unspecified parallelism, limit to the number of processors,
+// but with a minimum greater than 1 so there is some parallelism.
+constexpr unsigned long kParallelLevelMinimum = 2u;
+
+// For "unbounded" parallelism, limit to a very high value.
+// Under a job server, parallelism is effectively limited
+// only by available job server tokens.
+constexpr unsigned long kParallelLevelUnbounded = 0x10000u;
+}
+
 namespace cmsys {
 class RegularExpression;
 }
@@ -66,18 +76,14 @@ private:
   cmCTestMultiProcessHandler* Handler;
 };
 
-cmCTestMultiProcessHandler::cmCTestMultiProcessHandler()
+cmCTestMultiProcessHandler::cmCTestMultiProcessHandler(
+  cmCTest* ctest, cmCTestTestHandler* handler)
+  : CTest(ctest)
+  , TestHandler(handler)
+  , ProcessorsAvailable(cmAffinity::GetProcessorsAvailable())
+  , HaveAffinity(this->ProcessorsAvailable.size())
+  , ParallelLevelDefault(kParallelLevelMinimum)
 {
-  this->ParallelLevel = 1;
-  this->TestLoad = 0;
-  this->FakeLoadForTesting = 0;
-  this->Completed = 0;
-  this->RunningCount = 0;
-  this->ProcessorsAvailable = cmAffinity::GetProcessorsAvailable();
-  this->HaveAffinity = this->ProcessorsAvailable.size();
-  this->HasCycles = false;
-  this->HasInvalidGeneratedResourceSpec = false;
-  this->SerialTestRunning = false;
 }
 
 cmCTestMultiProcessHandler::~cmCTestMultiProcessHandler() = default;
@@ -103,9 +109,43 @@ bool cmCTestMultiProcessHandler::SetTests(TestMap tests,
 }
 
 // Set the max number of tests that can be run at the same time.
-void cmCTestMultiProcessHandler::SetParallelLevel(size_t level)
+void cmCTestMultiProcessHandler::SetParallelLevel(cm::optional<size_t> level)
 {
-  this->ParallelLevel = level < 1 ? 1 : level;
+  this->ParallelLevel = level;
+
+  if (!this->ParallelLevel) {
+    // '-j' was given with no value.  Limit by number of processors.
+    cmsys::SystemInformation info;
+    info.RunCPUCheck();
+    unsigned long processorCount = info.GetNumberOfLogicalCPU();
+
+    if (cm::optional<std::string> fakeProcessorCount =
+          cmSystemTools::GetEnvVar(
+            "__CTEST_FAKE_PROCESSOR_COUNT_FOR_TESTING")) {
+      unsigned long pc = 0;
+      if (cmStrToULong(*fakeProcessorCount, &pc)) {
+        processorCount = pc;
+      } else {
+        cmSystemTools::Error("Failed to parse fake processor count: " +
+                             *fakeProcessorCount);
+      }
+    }
+
+    this->ParallelLevelDefault =
+      std::max(kParallelLevelMinimum, processorCount);
+  }
+}
+
+size_t cmCTestMultiProcessHandler::GetParallelLevel() const
+{
+  if ((this->ParallelLevel && *this->ParallelLevel == 0) ||
+      (!this->ParallelLevel && this->JobServerClient)) {
+    return kParallelLevelUnbounded;
+  }
+  if (this->ParallelLevel) {
+    return *this->ParallelLevel;
+  }
+  return this->ParallelLevelDefault;
 }
 
 void cmCTestMultiProcessHandler::SetTestLoad(unsigned long load)
@@ -238,9 +278,7 @@ void cmCTestMultiProcessHandler::StartTestProcess(int test)
   cmWorkingDirectory workdir(this->Properties[test]->Directory);
   if (workdir.Failed()) {
     cmCTestRunTest::StartFailure(std::move(testRun), this->Total,
-                                 "Failed to change working directory to " +
-                                   this->Properties[test]->Directory + " : " +
-                                   std::strerror(workdir.GetLastResult()),
+                                 workdir.GetError(),
                                  "Failed to change working directory");
     return;
   }
@@ -402,6 +440,15 @@ void cmCTestMultiProcessHandler::SetStopTimePassed()
   }
 }
 
+bool cmCTestMultiProcessHandler::ResourceLocksAvailable(int test)
+{
+  return std::all_of(this->Properties[test]->ProjectResources.begin(),
+                     this->Properties[test]->ProjectResources.end(),
+                     [this](std::string const& r) -> bool {
+                       return !cm::contains(this->ProjectResourcesLocked, r);
+                     });
+}
+
 void cmCTestMultiProcessHandler::LockResources(int index)
 {
   this->RunningCount += this->GetProcessorsUsed(index);
@@ -451,11 +498,12 @@ void cmCTestMultiProcessHandler::UnlockResources(int index)
 
 inline size_t cmCTestMultiProcessHandler::GetProcessorsUsed(int test)
 {
-  size_t processors = static_cast<int>(this->Properties[test]->Processors);
+  size_t processors = this->Properties[test]->Processors;
+  size_t const parallelLevel = this->GetParallelLevel();
   // If processors setting is set higher than the -j
   // setting, we default to using all of the process slots.
-  if (processors > this->ParallelLevel) {
-    processors = this->ParallelLevel;
+  if (processors > parallelLevel) {
+    processors = parallelLevel;
   }
   // Cap tests that want affinity to the maximum affinity available.
   if (this->HaveAffinity && processors > this->HaveAffinity &&
@@ -509,8 +557,9 @@ void cmCTestMultiProcessHandler::StartNextTests()
 
   size_t numToStart = 0;
 
-  if (this->RunningCount < this->ParallelLevel) {
-    numToStart = this->ParallelLevel - this->RunningCount;
+  size_t const parallelLevel = this->GetParallelLevel();
+  if (this->RunningCount < parallelLevel) {
+    numToStart = parallelLevel - this->RunningCount;
   }
 
   if (numToStart == 0) {
@@ -524,7 +573,7 @@ void cmCTestMultiProcessHandler::StartNextTests()
   }
 
   bool allTestsFailedTestLoadCheck = false;
-  size_t minProcessorsRequired = this->ParallelLevel;
+  size_t minProcessorsRequired = this->GetParallelLevel();
   std::string testWithMinProcessors;
 
   cmsys::SystemInformation info;
@@ -601,10 +650,8 @@ void cmCTestMultiProcessHandler::StartNextTests()
     }
 
     // Exclude tests that depend on currently-locked project resources.
-    for (std::string const& i : this->Properties[test]->ProjectResources) {
-      if (cm::contains(this->ProjectResourcesLocked, i)) {
-        continue;
-      }
+    if (!this->ResourceLocksAvailable(test)) {
+      continue;
     }
 
     // Allocate system resources needed by this test.
@@ -819,7 +866,7 @@ void cmCTestMultiProcessHandler::ReadCostData()
 
       this->Properties[index]->PreviousRuns = prev;
       // When not running in parallel mode, don't use cost data
-      if (this->ParallelLevel > 1 && this->Properties[index] &&
+      if (this->GetParallelLevel() > 1 && this->Properties[index] &&
           this->Properties[index]->Cost == 0) {
         this->Properties[index]->Cost = cost;
       }
@@ -848,7 +895,7 @@ int cmCTestMultiProcessHandler::SearchByName(std::string const& name)
 
 void cmCTestMultiProcessHandler::CreateTestCostList()
 {
-  if (this->ParallelLevel > 1) {
+  if (this->GetParallelLevel() > 1) {
     this->CreateParallelTestCostList();
   } else {
     this->CreateSerialTestCostList();
@@ -1109,6 +1156,11 @@ static Json::Value DumpCTestProperties(
     properties.append(DumpCTestProperty(
       "FIXTURES_SETUP", DumpToJsonArray(testProperties.FixturesSetup)));
   }
+  if (!testProperties.GeneratedResourceSpecFile.empty()) {
+    properties.append(
+      DumpCTestProperty("GENERATED_RESOURCE_SPEC_FILE",
+                        testProperties.GeneratedResourceSpecFile));
+  }
   if (!testProperties.Labels.empty()) {
     properties.append(
       DumpCTestProperty("LABELS", DumpToJsonArray(testProperties.Labels)));
@@ -1155,6 +1207,15 @@ static Json::Value DumpCTestProperties(
     properties.append(
       DumpCTestProperty("TIMEOUT", testProperties.Timeout->count()));
   }
+  if (testProperties.TimeoutSignal) {
+    properties.append(DumpCTestProperty("TIMEOUT_SIGNAL_NAME",
+                                        testProperties.TimeoutSignal->Name));
+  }
+  if (testProperties.TimeoutGracePeriod) {
+    properties.append(
+      DumpCTestProperty("TIMEOUT_SIGNAL_GRACE_PERIOD",
+                        testProperties.TimeoutGracePeriod->count()));
+  }
   if (!testProperties.TimeoutRegularExpressions.empty()) {
     properties.append(DumpCTestProperty(
       "TIMEOUT_AFTER_MATCH", DumpTimeoutAfterMatch(testProperties)));
@@ -1165,6 +1226,11 @@ static Json::Value DumpCTestProperties(
   if (!testProperties.Directory.empty()) {
     properties.append(
       DumpCTestProperty("WORKING_DIRECTORY", testProperties.Directory));
+  }
+  if (!testProperties.CustomProperties.empty()) {
+    for (auto const& it : testProperties.CustomProperties) {
+      properties.append(DumpCTestProperty(it.first, it.second));
+    }
   }
   return properties;
 }

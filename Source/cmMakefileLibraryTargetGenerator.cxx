@@ -12,6 +12,7 @@
 #include <cmext/algorithm>
 
 #include "cmGeneratedFileStream.h"
+#include "cmGeneratorOptions.h"
 #include "cmGeneratorTarget.h"
 #include "cmGlobalUnixMakefileGenerator3.h"
 #include "cmLinkLineComputer.h"
@@ -169,10 +170,16 @@ void cmMakefileLibraryTargetGenerator::WriteSharedLibraryRules(bool relink)
   std::string linkRuleVar =
     cmStrCat("CMAKE_", linkLanguage, "_CREATE_SHARED_LIBRARY");
 
+  if (this->GeneratorTarget->IsArchivedAIXSharedLibrary()) {
+    linkRuleVar =
+      cmStrCat("CMAKE_", linkLanguage, "_CREATE_SHARED_LIBRARY_ARCHIVE");
+  }
+
   std::string extraFlags;
   this->GetTargetLinkFlags(extraFlags, linkLanguage);
   this->LocalGenerator->AddConfigVariableFlags(
-    extraFlags, "CMAKE_SHARED_LINKER_FLAGS", this->GetConfigName());
+    extraFlags, "CMAKE_SHARED_LINKER_FLAGS", this->GeneratorTarget,
+    cmBuildStep::Link, linkLanguage, this->GetConfigName());
 
   std::unique_ptr<cmLinkLineComputer> linkLineComputer =
     this->CreateLinkLineComputer(
@@ -207,7 +214,8 @@ void cmMakefileLibraryTargetGenerator::WriteModuleLibraryRules(bool relink)
   std::string extraFlags;
   this->GetTargetLinkFlags(extraFlags, linkLanguage);
   this->LocalGenerator->AddConfigVariableFlags(
-    extraFlags, "CMAKE_MODULE_LINKER_FLAGS", this->GetConfigName());
+    extraFlags, "CMAKE_MODULE_LINKER_FLAGS", this->GeneratorTarget,
+    cmBuildStep::Link, linkLanguage, this->GetConfigName());
 
   std::unique_ptr<cmLinkLineComputer> linkLineComputer =
     this->CreateLinkLineComputer(
@@ -234,7 +242,8 @@ void cmMakefileLibraryTargetGenerator::WriteFrameworkRules(bool relink)
   std::string extraFlags;
   this->GetTargetLinkFlags(extraFlags, linkLanguage);
   this->LocalGenerator->AddConfigVariableFlags(
-    extraFlags, "CMAKE_MACOSX_FRAMEWORK_LINKER_FLAGS", this->GetConfigName());
+    extraFlags, "CMAKE_MACOSX_FRAMEWORK_LINKER_FLAGS", this->GeneratorTarget,
+    cmBuildStep::Link, linkLanguage, this->GetConfigName());
 
   this->WriteLibraryRules(linkRuleVar, extraFlags, relink);
 }
@@ -377,7 +386,8 @@ void cmMakefileLibraryTargetGenerator::WriteNvidiaDeviceLibraryRules(
     }
 
     auto rulePlaceholderExpander =
-      this->LocalGenerator->CreateRulePlaceholderExpander();
+      this->LocalGenerator->CreateRulePlaceholderExpander(
+        cmBuildStep::Link, this->GeneratorTarget, linkLanguage);
 
     // Construct the main link rule and expand placeholders.
     rulePlaceholderExpander->SetTargetImpLib(targetOutput);
@@ -702,7 +712,8 @@ void cmMakefileLibraryTargetGenerator::WriteLibraryRules(
 
   // Expand the rule variables.
   auto rulePlaceholderExpander =
-    this->LocalGenerator->CreateRulePlaceholderExpander();
+    this->LocalGenerator->CreateRulePlaceholderExpander(
+      cmBuildStep::Link, this->GeneratorTarget, linkLanguage);
   bool useWatcomQuote =
     this->Makefile->IsOn(linkRuleVar + "_USE_WATCOM_QUOTE");
   cmList real_link_commands;
@@ -788,7 +799,8 @@ void cmMakefileLibraryTargetGenerator::WriteLibraryRules(
     vars.LinkLibraries = linkLibs.c_str();
     vars.ObjectsQuoted = buildObjs.c_str();
     std::string targetOutSOName;
-    if (this->GeneratorTarget->HasSOName(this->GetConfigName())) {
+    if (this->GeneratorTarget->HasSOName(this->GetConfigName()) ||
+        this->GeneratorTarget->IsArchivedAIXSharedLibrary()) {
       vars.SONameFlag = this->Makefile->GetSONameFlag(linkLanguage);
       targetOutSOName = this->LocalGenerator->ConvertToOutputFormat(
         this->TargetNames.SharedObject, cmOutputConverter::SHELL);
@@ -978,6 +990,9 @@ void cmMakefileLibraryTargetGenerator::WriteLibraryRules(
     auto genStubsRule =
       this->Makefile->GetDefinition("CMAKE_CREATE_TEXT_STUBS");
     cmList genStubs_commands{ genStubsRule };
+    this->LocalGenerator->CreateCDCommand(
+      genStubs_commands, this->Makefile->GetCurrentBinaryDirectory(),
+      this->LocalGenerator->GetBinaryDirectory());
 
     std::string TBDFullPath =
       cmStrCat(outpathImp, this->TargetNames.ImportOutput);

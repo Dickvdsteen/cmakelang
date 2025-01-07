@@ -6,7 +6,7 @@
 #include "cmConfigure.h" // IWYU pragma: keep
 
 #include <algorithm>
-#include <cstdint>
+#include <cstddef>
 #include <initializer_list>
 #include <iterator>
 #include <memory>
@@ -47,7 +47,7 @@ public:
 
   using value_type = container_type::value_type;
   using allocator_type = container_type::allocator_type;
-  using index_type = std::intptr_t;
+  using index_type = std::ptrdiff_t;
   using size_type = container_type::size_type;
   using difference_type = container_type::difference_type;
   using reference = container_type::reference;
@@ -1135,11 +1135,11 @@ public:
 
   // Non-members
   // ===========
-  friend inline bool operator==(const cmList& lhs, const cmList& rhs) noexcept
+  friend bool operator==(const cmList& lhs, const cmList& rhs) noexcept
   {
     return lhs.Values == rhs.Values;
   }
-  friend inline bool operator!=(const cmList& lhs, const cmList& rhs) noexcept
+  friend bool operator!=(const cmList& lhs, const cmList& rhs) noexcept
   {
     return lhs.Values != rhs.Values;
   }

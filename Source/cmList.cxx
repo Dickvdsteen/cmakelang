@@ -114,9 +114,9 @@ protected:
 
   StringFilter GetCaseFilter(CaseSensitivity sensitivity)
   {
-    return (sensitivity == CaseSensitivity::INSENSITIVE)
-      ? cmSystemTools::LowerCase
-      : nullptr;
+    constexpr std::string (*filter)(std::string const&) =
+      cmSystemTools::LowerCase;
+    return (sensitivity == CaseSensitivity::INSENSITIVE) ? filter : nullptr;
   }
 
   using ComparisonFunction =
@@ -146,7 +146,7 @@ public:
   {
     std::string result = argument;
     for (auto const& filter : this->Filters) {
-      if (filter != nullptr) {
+      if (filter) {
         result = filter(result);
       }
     }

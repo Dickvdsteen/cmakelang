@@ -25,6 +25,7 @@
 #include "cmFileSet.h"
 #include "cmGeneratedFileStream.h"
 #include "cmGeneratorExpression.h"
+#include "cmGeneratorOptions.h"
 #include "cmGeneratorTarget.h"
 #include "cmGlobalUnixMakefileGenerator3.h"
 #include "cmLinkLineComputer.h" // IWYU pragma: keep
@@ -65,7 +66,7 @@ cmMakefileTargetGenerator::cmMakefileTargetGenerator(cmGeneratorTarget* target)
   this->NoRuleMessages = false;
   if (cmValue ruleStatus =
         cm->GetState()->GetGlobalProperty("RULE_MESSAGES")) {
-    this->NoRuleMessages = cmIsOff(*ruleStatus);
+    this->NoRuleMessages = ruleStatus.IsOff();
   }
   switch (this->GeneratorTarget->GetPolicyStatusCMP0113()) {
     case cmPolicies::WARN:
@@ -74,8 +75,6 @@ cmMakefileTargetGenerator::cmMakefileTargetGenerator(cmGeneratorTarget* target)
       this->CMP0113New = false;
       break;
     case cmPolicies::NEW:
-    case cmPolicies::REQUIRED_IF_USED:
-    case cmPolicies::REQUIRED_ALWAYS:
       this->CMP0113New = true;
       break;
   }
@@ -157,6 +156,8 @@ void cmMakefileTargetGenerator::GetTargetLinkFlags(
     flags, this->GeneratorTarget, this->GetConfigName(), linkLanguage);
   this->LocalGenerator->AppendPositionIndependentLinkerFlags(
     flags, this->GeneratorTarget, this->GetConfigName(), linkLanguage);
+  this->LocalGenerator->AppendWarningAsErrorLinkerFlags(
+    flags, this->GeneratorTarget, linkLanguage);
   this->LocalGenerator->AppendDependencyInfoLinkerFlags(
     flags, this->GeneratorTarget, this->GetConfigName(), linkLanguage);
 }
@@ -244,13 +245,15 @@ void cmMakefileTargetGenerator::WriteTargetBuildRules()
   }
 
   // add custom commands to the clean rules?
-  bool const clean = cmIsOff(this->Makefile->GetProperty("CLEAN_NO_CUSTOM"));
+  bool const clean = this->Makefile->GetProperty("CLEAN_NO_CUSTOM").IsOff();
 
   // First generate the object rule files.  Save a list of all object
   // files for this target.
   std::vector<cmSourceFile const*> customCommands;
   this->GeneratorTarget->GetCustomCommands(customCommands,
                                            this->GetConfigName());
+  std::vector<std::string> codegen_depends;
+  codegen_depends.reserve(customCommands.size());
   for (cmSourceFile const* sf : customCommands) {
     if (this->CMP0113New &&
         !this->LocalGenerator->GetCommandsVisited(this->GeneratorTarget)
@@ -273,6 +276,33 @@ void cmMakefileTargetGenerator::WriteTargetBuildRules()
           this->LocalGenerator->MaybeRelativeToCurBinDir(byproduct));
       }
     }
+
+    if (ccg.GetCC().GetCodegen()) {
+      std::string const& output = ccg.GetOutputs().front();
+
+      // We always attach the actual commands to the first output.
+      codegen_depends.emplace_back(output);
+    }
+  }
+
+  // Some make tools need a special dependency for an empty rule.
+  if (codegen_depends.empty()) {
+    std::string hack = this->GlobalGenerator->GetEmptyRuleHackDepends();
+    if (!hack.empty()) {
+      codegen_depends.emplace_back(std::move(hack));
+    }
+  }
+
+  // Construct the codegen target.
+  {
+    std::string const codegenTarget = cmStrCat(
+      this->LocalGenerator->GetRelativeTargetDirectory(this->GeneratorTarget),
+      "/codegen");
+
+    // Write the rule.
+    this->LocalGenerator->WriteMakeRule(*this->BuildFileStream, nullptr,
+                                        codegenTarget, codegen_depends, {},
+                                        true);
   }
 
   // Add byproducts from build events to the clean rules
@@ -613,8 +643,9 @@ void cmMakefileTargetGenerator::WriteObjectRuleFiles(
   // Use compiler to generate dependencies, if supported.
   bool const compilerGenerateDeps =
     this->GlobalGenerator->SupportsCompilerDependencies() &&
-    cmIsOn(this->Makefile->GetDefinition(
-      cmStrCat("CMAKE_", lang, "_DEPENDS_USE_COMPILER")));
+    this->Makefile
+      ->GetDefinition(cmStrCat("CMAKE_", lang, "_DEPENDS_USE_COMPILER"))
+      .IsOn();
   auto const scanner = compilerGenerateDeps ? cmDependencyScannerKind::Compiler
                                             : cmDependencyScannerKind::CMake;
 
@@ -653,9 +684,7 @@ void cmMakefileTargetGenerator::WriteObjectRuleFiles(
   // The object file should be checked for dependency integrity.
   std::string objFullPath =
     cmStrCat(this->LocalGenerator->GetCurrentBinaryDirectory(), '/', obj);
-  objFullPath = cmSystemTools::CollapseFullPath(objFullPath);
-  std::string const srcFullPath =
-    cmSystemTools::CollapseFullPath(source.GetFullPath());
+  std::string const srcFullPath = source.GetFullPath();
   this->LocalGenerator->AddImplicitDepends(this->GeneratorTarget, lang,
                                            objFullPath, srcFullPath, scanner);
 
@@ -671,15 +700,12 @@ void cmMakefileTargetGenerator::WriteObjectRuleFiles(
   std::string const configUpper = cmSystemTools::UpperCase(config);
 
   // Add precompile headers dependencies
-  std::vector<std::string> architectures =
-    this->GeneratorTarget->GetAppleArchs(config, lang);
-  if (architectures.empty()) {
-    architectures.emplace_back();
-  }
+  std::vector<std::string> pchArchs =
+    this->GeneratorTarget->GetPchArchs(config, lang);
 
   std::string filterArch;
   std::unordered_map<std::string, std::string> pchSources;
-  for (const std::string& arch : architectures) {
+  for (const std::string& arch : pchArchs) {
     const std::string pchSource =
       this->GeneratorTarget->GetPchSource(config, lang, arch);
     if (pchSource == source.GetFullPath()) {
@@ -691,7 +717,7 @@ void cmMakefileTargetGenerator::WriteObjectRuleFiles(
   }
 
   if (!pchSources.empty() && !source.GetProperty("SKIP_PRECOMPILE_HEADERS")) {
-    for (const std::string& arch : architectures) {
+    for (const std::string& arch : pchArchs) {
       std::string const& pchHeader =
         this->GeneratorTarget->GetPchHeader(config, lang, arch);
       depends.push_back(pchHeader);
@@ -1533,8 +1559,7 @@ void cmMakefileTargetGenerator::WriteTargetDependRules()
               cmOutputConverter::SHELL)
          << " "
          << this->LocalGenerator->ConvertToOutputFormat(
-              cmSystemTools::CollapseFullPath(this->InfoFileNameFull),
-              cmOutputConverter::SHELL);
+              this->InfoFileNameFull, cmOutputConverter::SHELL);
   if (this->LocalGenerator->GetColorMakefile()) {
     depCmd << " \"--color=$(COLOR)\"";
   }
@@ -1683,7 +1708,8 @@ void cmMakefileTargetGenerator::WriteDeviceLinkRule(
   vars.Flags = flags.c_str();
 
   std::string compileCmd = this->GetLinkRule("CMAKE_CUDA_DEVICE_LINK_COMPILE");
-  auto rulePlaceholderExpander = localGen->CreateRulePlaceholderExpander();
+  auto rulePlaceholderExpander = localGen->CreateRulePlaceholderExpander(
+    cmBuildStep::Link, this->GetGeneratorTarget(), "CUDA");
   rulePlaceholderExpander->ExpandRuleVariables(localGen, compileCmd, vars);
 
   commands.emplace_back(compileCmd);
@@ -2082,7 +2108,7 @@ bool cmMakefileTargetGenerator::CheckUseResponseFileForObjects(
     "CMAKE_" + l + "_USE_RESPONSE_FILE_FOR_OBJECTS";
   if (cmValue val = this->Makefile->GetDefinition(responseVar)) {
     if (!val->empty()) {
-      return cmIsOn(val);
+      return val.IsOn();
     }
   }
 
@@ -2121,7 +2147,7 @@ bool cmMakefileTargetGenerator::CheckUseResponseFileForLibraries(
     "CMAKE_" + l + "_USE_RESPONSE_FILE_FOR_LIBRARIES";
   if (cmValue val = this->Makefile->GetDefinition(responseVar)) {
     if (!val->empty()) {
-      return cmIsOn(val);
+      return val.IsOn();
     }
   }
 
@@ -2179,13 +2205,14 @@ void cmMakefileTargetGenerator::CreateLinkLibs(
   bool useResponseFile, std::vector<std::string>& makefile_depends,
   std::string const& linkLanguage, ResponseFlagFor responseMode)
 {
-  std::string frameworkPath;
-  std::string linkPath;
-  cmComputeLinkInformation* pcli =
-    this->GeneratorTarget->GetLinkInformation(this->GetConfigName());
-  this->LocalGenerator->OutputLinkLibraries(pcli, linkLineComputer, linkLibs,
-                                            frameworkPath, linkPath);
-  linkLibs = frameworkPath + linkPath + linkLibs;
+  if (cmComputeLinkInformation* pcli =
+        this->GeneratorTarget->GetLinkInformation(this->GetConfigName())) {
+    std::string frameworkPath;
+    std::string linkPath;
+    this->LocalGenerator->OutputLinkLibraries(pcli, linkLineComputer, linkLibs,
+                                              frameworkPath, linkPath);
+    linkLibs = frameworkPath + linkPath + linkLibs;
+  }
 
   if (useResponseFile &&
       linkLibs.find_first_not_of(' ') != std::string::npos) {

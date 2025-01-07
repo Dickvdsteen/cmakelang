@@ -41,6 +41,26 @@ public:
   using Encoding = cmProcessOutput::Encoding;
 
   /**
+   * Return a lower case string
+   */
+  static std::string LowerCase(cm::string_view);
+  static std::string LowerCase(char const* s)
+  {
+    return LowerCase(cm::string_view{ s });
+  }
+  using cmsys::SystemTools::LowerCase;
+
+  /**
+   * Return an upper case string
+   */
+  static std::string UpperCase(cm::string_view);
+  static std::string UpperCase(char const* s)
+  {
+    return UpperCase(cm::string_view{ s });
+  }
+  using cmsys::SystemTools::UpperCase;
+
+  /**
    * Look for and replace registry values in a string
    */
   static void ExpandRegistryValues(std::string& source,
@@ -211,8 +231,8 @@ public:
                                  std::string* err = nullptr);
 
   //! Rename a file if contents are different, delete the source otherwise
-  static void MoveFileIfDifferent(const std::string& source,
-                                  const std::string& destination);
+  static cmsys::Status MoveFileIfDifferent(const std::string& source,
+                                           const std::string& destination);
 
   /**
    * Run a single executable command
@@ -399,7 +419,18 @@ public:
                                      std::string const& in);
 
   static cm::optional<std::string> GetEnvVar(std::string const& var);
-  static std::vector<std::string> SplitEnvPath(std::string const& value);
+  static std::vector<std::string> GetEnvPathNormalized(std::string const& var);
+
+  static std::vector<std::string> SplitEnvPath(cm::string_view in);
+  static std::vector<std::string> SplitEnvPathNormalized(cm::string_view in);
+
+  /** Convert an input path to an absolute path with no '/..' components.
+      Backslashes in the input path are converted to forward slashes.
+      Relative paths are interpreted w.r.t. GetLogicalWorkingDirectory.
+      On Windows, the on-disk capitalization is loaded for existing paths.
+      This is similar to 'realpath', but preserves symlinks that are
+      not erased by '../' components.  */
+  static std::string ToNormalizedPathOnDisk(std::string p);
 
 #ifndef CMAKE_BOOTSTRAP
   /** Remove an environment variable */
@@ -497,6 +528,7 @@ public:
                       const std::vector<std::string>& files, bool verbose);
   static bool CreateTar(const std::string& outFileName,
                         const std::vector<std::string>& files,
+                        const std::string& workingDirectory,
                         cmTarCompression compressType, bool verbose,
                         std::string const& mtime = std::string(),
                         std::string const& format = std::string(),
@@ -505,12 +537,6 @@ public:
                          const std::vector<std::string>& files,
                          cmTarExtractTimestamps extractTimestamps,
                          bool verbose);
-  // This should be called first thing in main
-  // it will keep child processes from inheriting the
-  // stdin and stdout of this process.  This is important
-  // if you want to be able to kill child processes and
-  // not get stuck waiting for all the output on the pipes.
-  static void DoNotInheritStdPipes();
 
   static void EnsureStdPipes();
 
@@ -530,8 +556,15 @@ public:
   static std::string const& GetCMakeRoot();
   static std::string const& GetHTMLDoc();
 
-  /** Get the CWD mapped through the KWSys translation map.  */
-  static std::string GetCurrentWorkingDirectory();
+  /** Get the CMake config directory **/
+  static cm::optional<std::string> GetSystemConfigDirectory();
+  static cm::optional<std::string> GetCMakeConfigDirectory();
+
+  static std::string const& GetLogicalWorkingDirectory();
+
+  /** The logical working directory may contain symlinks but must not
+      contain any '../' path components.  */
+  static cmsys::Status SetLogicalWorkingDirectory(std::string const& lwd);
 
   /** Echo a message in color using KWSys's Terminal cprintf.  */
   static void MakefileColorEcho(int color, const char* message, bool newLine,
@@ -571,6 +604,15 @@ public:
   static std::string EncodeURL(std::string const& in,
                                bool escapeSlashes = true);
 
+  enum class DirCase
+  {
+    Sensitive,
+    Insensitive,
+  };
+
+  /** Returns nullopt when `dir` is not a valid directory */
+  static cm::optional<DirCase> GetDirCase(std::string const& dir);
+
 #ifdef _WIN32
   struct WindowsFileRetry
   {
@@ -587,13 +629,14 @@ public:
     unsigned int dwBuildNumber;
   };
   static WindowsVersion GetWindowsVersion();
+
+  /** Attempt to get full path to COMSPEC, default "cmd.exe" */
+  static std::string GetComspec();
 #endif
 
-  /** Get the real path for a given path, removing all symlinks.
-      This variant of GetRealPath also works on Windows but will
-      resolve subst drives too.  */
-  static std::string GetRealPathResolvingWindowsSubst(
-    const std::string& path, std::string* errorMessage = nullptr);
+  /** Get the real path for a given path, removing all symlinks.  */
+  static std::string GetRealPath(const std::string& path,
+                                 std::string* errorMessage = nullptr);
 
   /** Perform one-time initialization of libuv.  */
   static void InitializeLibUV();

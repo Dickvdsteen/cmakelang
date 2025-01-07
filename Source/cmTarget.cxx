@@ -120,8 +120,6 @@ cmValue cmTargetPropertyComputer::GetSources<cmTarget>(cmTarget const* tgt,
             CM_FALLTHROUGH;
           case cmPolicies::OLD:
             break;
-          case cmPolicies::REQUIRED_ALWAYS:
-          case cmPolicies::REQUIRED_IF_USED:
           case cmPolicies::NEW:
             addContent = true;
             break;
@@ -250,7 +248,7 @@ struct UsageRequirementProperty
 
   void CopyFromEntries(cmBTStringRange entries)
   {
-    return cm::append(this->Entries, entries);
+    cm::append(this->Entries, entries);
   }
 
   enum class Action
@@ -354,6 +352,8 @@ struct TargetProperty
   }
 
   cm::static_string_view const Name;
+  // Explicit initialization is needed for AppleClang in Xcode 8 and below
+  // NOLINTNEXTLINE(readability-redundant-member-init)
   cm::optional<cm::static_string_view> const Default = {};
   InitCondition const InitConditional = InitCondition::Always;
   Repetition const Repeat = Repetition::Once;
@@ -373,6 +373,8 @@ struct TargetProperty
 
 TargetProperty const StaticTargetProperties[] = {
   /* clang-format off */
+  // -- Debugger Properties
+  { "DEBUGGER_WORKING_DIRECTORY"_s, IC::ExecutableTarget },
   // Compilation properties
   { "COMPILE_WARNING_AS_ERROR"_s, IC::CanCompileSources },
   { "INTERPROCEDURAL_OPTIMIZATION"_s, IC::CanCompileSources },
@@ -404,13 +406,17 @@ TargetProperty const StaticTargetProperties[] = {
   { "VS_DEBUGGER_COMMAND_ARGUMENTS"_s, IC::ExecutableTarget },
   { "VS_DEBUGGER_ENVIRONMENT"_s, IC::ExecutableTarget },
   { "VS_DEBUGGER_WORKING_DIRECTORY"_s, IC::ExecutableTarget },
+  { "VS_USE_DEBUG_LIBRARIES"_s, IC::NonImportedTarget },
   // ---- OpenWatcom
   { "WATCOM_RUNTIME_LIBRARY"_s, IC::CanCompileSources },
+  // ---- AIX
+  { "AIX_SHARED_LIBRARY_ARCHIVE"_s, IC::SharedLibraryTarget },
   // -- Language
   // ---- C
   COMMON_LANGUAGE_PROPERTIES(C),
   // ---- C++
   COMMON_LANGUAGE_PROPERTIES(CXX),
+  { "CXX_MODULE_STD"_s, IC::CanCompileSources },
   // ---- CSharp
   { "DOTNET_SDK"_s, IC::NonImportedTarget },
   { "DOTNET_TARGET_FRAMEWORK"_s, IC::TargetWithCommands },
@@ -460,8 +466,10 @@ TargetProperty const StaticTargetProperties[] = {
 
   // Linking properties
   { "LINKER_TYPE"_s, IC::CanCompileSources },
+  { "LINK_WARNING_AS_ERROR"_s, IC::CanCompileSources },
   { "ENABLE_EXPORTS"_s, IC::TargetWithSymbolExports },
   { "LINK_LIBRARIES_ONLY_TARGETS"_s, IC::NormalNonImportedTarget },
+  { "LINK_LIBRARIES_STRATEGY"_s, IC::NormalNonImportedTarget },
   { "LINK_SEARCH_START_STATIC"_s, IC::CanCompileSources },
   { "LINK_SEARCH_END_STATIC"_s, IC::CanCompileSources },
   // Initialize per-configuration name postfix property from the variable only
@@ -546,6 +554,7 @@ TargetProperty const StaticTargetProperties[] = {
   { "UNITY_BUILD_UNIQUE_ID"_s, IC::CanCompileSources },
   { "UNITY_BUILD_BATCH_SIZE"_s, "8"_s, IC::CanCompileSources },
   { "UNITY_BUILD_MODE"_s, "BATCH"_s, IC::CanCompileSources },
+  { "UNITY_BUILD_RELOCATABLE"_s, IC::CanCompileSources },
   { "OPTIMIZE_DEPENDENCIES"_s, IC::CanCompileSources },
   { "VERIFY_INTERFACE_HEADER_SETS"_s },
   // -- Android
@@ -594,6 +603,7 @@ TargetProperty const StaticTargetProperties[] = {
 
   // Metadata
   { "CROSSCOMPILING_EMULATOR"_s, IC::ExecutableTarget },
+  { "EXPORT_BUILD_DATABASE"_s, IC::CanCompileSources },
   { "EXPORT_COMPILE_COMMANDS"_s, IC::CanCompileSources },
   { "FOLDER"_s },
   { "TEST_LAUNCHER"_s, IC::ExecutableTarget },
@@ -620,6 +630,7 @@ TargetProperty const StaticTargetProperties[] = {
   { "XCODE_SCHEME_MALLOC_GUARD_EDGES"_s, IC::NeedsXcodeAndCanCompileSources },
   { "XCODE_SCHEME_GUARD_MALLOC"_s, IC::NeedsXcodeAndCanCompileSources },
   { "XCODE_SCHEME_LAUNCH_MODE"_s, IC::NeedsXcodeAndCanCompileSources },
+  { "XCODE_SCHEME_LLDB_INIT_FILE"_s, IC::NeedsXcodeAndCanCompileSources },
   { "XCODE_SCHEME_ZOMBIE_OBJECTS"_s, IC::NeedsXcodeAndCanCompileSources },
   { "XCODE_SCHEME_MALLOC_STACK"_s, IC::NeedsXcodeAndCanCompileSources },
   { "XCODE_SCHEME_DYNAMIC_LINKER_API_USAGE"_s, IC::NeedsXcodeAndCanCompileSources },
@@ -641,6 +652,7 @@ public:
   cmStateEnums::TargetType TargetType;
   cmMakefile* Makefile;
   cmPolicies::PolicyMap PolicyMap;
+  cmTarget const* TemplateTarget;
   std::string Name;
   std::string InstallPath;
   std::string RuntimeInstallPath;
@@ -655,6 +667,7 @@ public:
   bool PerConfig;
   cmTarget::Visibility TargetVisibility;
   std::set<BT<std::pair<std::string, bool>>> Utilities;
+  std::set<std::string> CodegenDependencies;
   std::vector<cmCustomCommand> PreBuildCommands;
   std::vector<cmCustomCommand> PreLinkCommands;
   std::vector<cmCustomCommand> PostBuildCommands;
@@ -926,6 +939,7 @@ cmTarget::cmTarget(std::string const& name, cmStateEnums::TargetType type,
   this->impl->TargetType = type;
   this->impl->Makefile = mf;
   this->impl->Name = name;
+  this->impl->TemplateTarget = nullptr;
   this->impl->IsGeneratorProvided = false;
   this->impl->HaveInstallRule = false;
   this->impl->IsDLLPlatform = false;
@@ -1078,6 +1092,11 @@ cmTarget::cmTarget(std::string const& name, cmStateEnums::TargetType type,
       }
     }
 
+    // Imported targets must set AIX_SHARED_LIBRARY_ARCHIVE explicitly.
+    if (this->IsImported() && property == "AIX_SHARED_LIBRARY_ARCHIVE"_s) {
+      return;
+    }
+
     // Replace everything after "CMAKE_"
     defKey.replace(defKey.begin() + 6, defKey.end(), property);
     if (cmValue value = mf->GetDefinition(defKey)) {
@@ -1181,6 +1200,14 @@ const std::string& cmTarget::GetName() const
   return this->impl->Name;
 }
 
+const std::string& cmTarget::GetTemplateName() const
+{
+  if (this->impl->TemplateTarget) {
+    return this->impl->TemplateTarget->GetTemplateName();
+  }
+  return this->impl->Name;
+}
+
 cmPolicies::PolicyStatus cmTarget::GetPolicyStatus(
   cmPolicies::PolicyID policy) const
 {
@@ -1236,6 +1263,16 @@ void cmTarget::AddUtility(BT<std::pair<std::string, bool>> util)
   this->impl->Utilities.emplace(std::move(util));
 }
 
+void cmTarget::AddCodegenDependency(std::string const& name)
+{
+  this->impl->CodegenDependencies.emplace(name);
+}
+
+std::set<std::string> const& cmTarget::GetCodegenDeps() const
+{
+  return this->impl->CodegenDependencies;
+}
+
 std::set<BT<std::pair<std::string, bool>>> const& cmTarget::GetUtilities()
   const
 {
@@ -1269,6 +1306,29 @@ bool cmTarget::IsFrameworkOnApple() const
   return ((this->GetType() == cmStateEnums::SHARED_LIBRARY ||
            this->GetType() == cmStateEnums::STATIC_LIBRARY) &&
           this->IsApple() && this->GetPropertyAsBool("FRAMEWORK"));
+}
+
+bool cmTarget::IsArchivedAIXSharedLibrary() const
+{
+  if (this->GetType() == cmStateEnums::SHARED_LIBRARY && this->IsAIX()) {
+    cmValue value = this->GetProperty("AIX_SHARED_LIBRARY_ARCHIVE");
+    if (!value.IsEmpty()) {
+      return value.IsOn();
+    }
+    if (this->IsImported()) {
+      return false;
+    }
+    switch (this->GetPolicyStatusCMP0182()) {
+      case cmPolicies::WARN:
+      case cmPolicies::OLD:
+        // The OLD behavior's default is to disable shared library archives.
+        break;
+      case cmPolicies::NEW:
+        // The NEW behavior's default is to enable shared library archives.
+        return true;
+    }
+  }
+  return false;
 }
 
 bool cmTarget::IsAppBundleOnApple() const
@@ -1379,8 +1439,6 @@ std::string cmTargetInternals::ProcessSourceItemCMP0049(
       case cmPolicies::OLD:
         noMessage = true;
         break;
-      case cmPolicies::REQUIRED_ALWAYS:
-      case cmPolicies::REQUIRED_IF_USED:
       case cmPolicies::NEW:
         messageType = MessageType::FATAL_ERROR;
     }
@@ -1763,6 +1821,7 @@ void cmTarget::CopyPolicyStatuses(cmTarget const* tgt)
   assert(tgt->IsImported());
 
   this->impl->PolicyMap = tgt->impl->PolicyMap;
+  this->impl->TemplateTarget = tgt;
 }
 
 void cmTarget::CopyImportedCxxModulesEntries(cmTarget const* tgt)
@@ -1788,7 +1847,7 @@ void cmTarget::CopyImportedCxxModulesEntries(cmTarget const* tgt)
     cmMakeRange(tgt->impl->ImportedCxxModulesCompileOptions.Entries));
   this->impl->LinkLibraries.Entries.clear();
   this->impl->LinkLibraries.CopyFromEntries(
-    cmMakeRange(tgt->impl->LinkLibraries.Entries));
+    cmMakeRange(tgt->impl->ImportedCxxModulesLinkLibraries.Entries));
 
   // Copy the C++ module fileset entries from `tgt`'s `INTERFACE` to this
   // target's `PRIVATE`.
@@ -1841,6 +1900,7 @@ void cmTarget::CopyImportedCxxModulesProperties(cmTarget const* tgt)
     "CXX_STANDARD_REQUIRED",
     "CXX_EXTENSIONS",
     "CXX_VISIBILITY_PRESET",
+    "CXX_MODULE_STD",
 
     // Static analysis
     "CXX_CLANG_TIDY",
@@ -1862,6 +1922,10 @@ void cmTarget::CopyImportedCxxModulesProperties(cmTarget const* tgt)
     // Metadata
     "EchoString",
     "EXPORT_COMPILE_COMMANDS",
+    // Do *not* copy this property; it should be re-initialized at synthesis
+    // time from the `CMAKE_EXPORT_BUILD_DATABASE` variable as `IMPORTED`
+    // targets ignore the property initialization.
+    // "EXPORT_BUILD_DATABASE",
     "FOLDER",
     "LABELS",
     "PROJECT_LABEL",
@@ -2008,10 +2072,13 @@ struct ReadOnlyProperty
 {
   ReadOnlyProperty(ReadOnlyCondition cond)
     : Condition{ cond }
-    , Policy{} {};
+  {
+  }
   ReadOnlyProperty(ReadOnlyCondition cond, cmPolicies::PolicyID id)
     : Condition{ cond }
-    , Policy{ id } {};
+    , Policy{ id }
+  {
+  }
 
   ReadOnlyCondition Condition;
   cm::optional<cmPolicies::PolicyID> Policy;
@@ -2060,8 +2127,6 @@ struct ReadOnlyProperty
         case cmPolicies::OLD:
           readOnly = false;
           break;
-        case cmPolicies::REQUIRED_ALWAYS:
-        case cmPolicies::REQUIRED_IF_USED:
         case cmPolicies::NEW:
           context->IssueMessage(MessageType::FATAL_ERROR,
                                 this->message(prop, target));
@@ -2150,7 +2215,7 @@ void cmTarget::SetProperty(const std::string& prop, cmValue value)
   }
 
   if (prop == propIMPORTED_GLOBAL) {
-    if (!cmIsOn(value)) {
+    if (!value.IsOn()) {
       std::ostringstream e;
       e << "IMPORTED_GLOBAL property can't be set to FALSE on targets (\""
         << this->impl->Name << "\")\n";
@@ -2844,7 +2909,7 @@ std::string const& cmTarget::GetSafeProperty(std::string const& prop) const
 
 bool cmTarget::GetPropertyAsBool(const std::string& prop) const
 {
-  return cmIsOn(this->GetProperty(prop));
+  return this->GetProperty(prop).IsOn();
 }
 
 cmPropertyMap const& cmTarget::GetProperties() const
@@ -2983,7 +3048,9 @@ const char* cmTarget::GetSuffixVariableInternal(
     case cmStateEnums::SHARED_LIBRARY:
       switch (artifact) {
         case cmStateEnums::RuntimeBinaryArtifact:
-          return "CMAKE_SHARED_LIBRARY_SUFFIX";
+          return this->IsArchivedAIXSharedLibrary()
+            ? "CMAKE_SHARED_LIBRARY_ARCHIVE_SUFFIX"
+            : "CMAKE_SHARED_LIBRARY_SUFFIX";
         case cmStateEnums::ImportLibraryArtifact:
           return this->IsApple() ? "CMAKE_APPLE_IMPORT_FILE_SUFFIX"
                                  : "CMAKE_IMPORT_LIBRARY_SUFFIX";
